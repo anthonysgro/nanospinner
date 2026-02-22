@@ -120,4 +120,4 @@ Please keep changes minimal and focused. This crate's goal is to stay small and 
 
 ## License
 
-This project is not yet licensed. A `LICENSE` file will be added in a future release. If you plan to use this crate, please check back or open an issue to discuss licensing.
+This project is licensed under the [MIT License](LICENSE).
