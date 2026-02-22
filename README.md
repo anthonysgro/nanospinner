@@ -1,4 +1,4 @@
-# nanospinner
+# ⠋ nanospinner
 
 [![Crates.io](https://img.shields.io/crates/v/nanospinner)](https://crates.io/crates/nanospinner)
 [![Docs.rs](https://docs.rs/nanospinner/badge.svg)](https://docs.rs/nanospinner/latest/nanospinner/)

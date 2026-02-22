@@ -262,14 +262,12 @@ mod tests {
     use proptest::prelude::*;
 
     proptest! {
-        // **Validates: Requirements 1.1**
         #[test]
         fn property_construction_preserves_message(s in ".*") {
             let spinner = Spinner::with_writer(s.clone(), Vec::<u8>::new());
             prop_assert_eq!(spinner.message, s);
         }
 
-        // **Validates: Requirements 2.2**
         #[test]
         fn property_frame_format_correctness(msg in ".*", idx in 0usize..1000) {
             let frame_char = FRAMES[idx % FRAMES.len()];
@@ -278,7 +276,6 @@ mod tests {
             prop_assert_eq!(result, expected);
         }
 
-        // **Validates: Requirements 5.1, 6.1**
         #[test]
         fn property_finalization_output_format(msg in ".*") {
             // Test success finalization
@@ -302,7 +299,6 @@ mod tests {
             prop_assert!(fail_output.ends_with('\n'), "fail output must end with \\n");
         }
 
-        // **Validates: Requirements 5.2, 6.2**
         #[test]
         fn property_replacement_message_in_finalization(
             original in ".{1,50}",
@@ -328,7 +324,6 @@ mod tests {
             );
         }
 
-        // **Validates: Requirements 7.1**
         #[test]
         fn property_update_changes_shared_message_state(
             initial in ".{0,50}",
