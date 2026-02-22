@@ -2,6 +2,8 @@
 
 A minimal, zero-dependency terminal spinner for Rust CLI applications.
 
+![demo](demo.gif)
+
 Inspired by the [nanospinner](https://github.com/usmanyunusov/nanospinner) npm package, `nanospinner` gives you a lightweight animated spinner using only the Rust standard library — no heavy crates, no transitive dependencies, under 200 lines of code.
 
 ## Motivation
