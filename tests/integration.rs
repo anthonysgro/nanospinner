@@ -31,9 +31,13 @@ fn test_spinner_success_output_contains_checkmark_and_message() {
 
     handle.success();
 
-    let output = String::from_utf8(inner.lock().unwrap().clone()).expect("output should be valid UTF-8");
+    let output =
+        String::from_utf8(inner.lock().unwrap().clone()).expect("output should be valid UTF-8");
     assert!(output.contains("✔"), "output should contain the ✔ symbol");
-    assert!(output.contains("Loading..."), "output should contain the spinner message");
+    assert!(
+        output.contains("Loading..."),
+        "output should contain the spinner message"
+    );
 }
 
 #[test]
@@ -50,11 +54,20 @@ fn test_non_tty_output_is_plain_text() {
     let output = String::from_utf8(inner.lock().unwrap().clone()).unwrap();
 
     // No ANSI escape codes anywhere in the output
-    assert!(!output.contains("\x1b["), "non-TTY output must not contain ANSI escape codes");
+    assert!(
+        !output.contains("\x1b["),
+        "non-TTY output must not contain ANSI escape codes"
+    );
     // No carriage returns (spinner frame overwrites)
-    assert!(!output.contains('\r'), "non-TTY output must not contain carriage returns");
+    assert!(
+        !output.contains('\r'),
+        "non-TTY output must not contain carriage returns"
+    );
     // No spinner frame characters
-    assert!(!output.contains('⠋'), "non-TTY output must not contain spinner frames");
+    assert!(
+        !output.contains('⠋'),
+        "non-TTY output must not contain spinner frames"
+    );
     // Just the clean final line
     assert_eq!(output, "✔ Deploying...\n");
 }
@@ -70,7 +83,10 @@ fn test_non_tty_fail_output_is_plain_text() {
     handle.fail_with("Build failed");
 
     let output = String::from_utf8(inner.lock().unwrap().clone()).unwrap();
-    assert!(!output.contains("\x1b["), "non-TTY output must not contain ANSI escape codes");
+    assert!(
+        !output.contains("\x1b["),
+        "non-TTY output must not contain ANSI escape codes"
+    );
     assert_eq!(output, "✖ Build failed\n");
 }
 
@@ -88,9 +104,18 @@ fn test_tty_mode_produces_ansi_and_animation() {
     let output = String::from_utf8(inner.lock().unwrap().clone()).unwrap();
 
     // Should contain ANSI color codes
-    assert!(output.contains("\x1b[32m"), "TTY output should contain green ANSI code");
-    assert!(output.contains("\x1b[0m"), "TTY output should contain reset ANSI code");
+    assert!(
+        output.contains("\x1b[32m"),
+        "TTY output should contain green ANSI code"
+    );
+    assert!(
+        output.contains("\x1b[0m"),
+        "TTY output should contain reset ANSI code"
+    );
     // Should contain spinner animation frames
-    assert!(output.contains('⠋'), "TTY output should contain spinner frames");
+    assert!(
+        output.contains('⠋'),
+        "TTY output should contain spinner frames"
+    );
     assert!(output.contains("✔"), "TTY output should contain ✔");
 }

@@ -388,10 +388,19 @@ mod tests {
         handle.success();
 
         let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        assert!(!output.contains("\x1b["), "non-TTY output must not contain ANSI escape codes");
-        assert!(!output.contains(CLEAR_LINE), "non-TTY output must not contain CLEAR_LINE");
+        assert!(
+            !output.contains("\x1b["),
+            "non-TTY output must not contain ANSI escape codes"
+        );
+        assert!(
+            !output.contains(CLEAR_LINE),
+            "non-TTY output must not contain CLEAR_LINE"
+        );
         assert!(output.contains("✔"), "non-TTY output should contain ✔");
-        assert!(output.contains("Compiling..."), "non-TTY output should contain the message");
+        assert!(
+            output.contains("Compiling..."),
+            "non-TTY output should contain the message"
+        );
         assert_eq!(output, "✔ Compiling...\n");
     }
 
@@ -405,7 +414,10 @@ mod tests {
         handle.fail();
 
         let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        assert!(!output.contains("\x1b["), "non-TTY output must not contain ANSI escape codes");
+        assert!(
+            !output.contains("\x1b["),
+            "non-TTY output must not contain ANSI escape codes"
+        );
         assert!(output.contains("✖"), "non-TTY output should contain ✖");
         assert_eq!(output, "✖ Deploying...\n");
     }
@@ -420,7 +432,10 @@ mod tests {
         handle.success_with("Done!");
 
         let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        assert!(!output.contains("\x1b["), "non-TTY output must not contain ANSI escape codes");
+        assert!(
+            !output.contains("\x1b["),
+            "non-TTY output must not contain ANSI escape codes"
+        );
         assert_eq!(output, "✔ Done!\n");
     }
 
@@ -437,8 +452,14 @@ mod tests {
 
         let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
         // Should only contain the final line, no spinner frames
-        assert!(!output.contains('⠋'), "non-TTY output must not contain spinner frames");
-        assert!(!output.contains('\r'), "non-TTY output must not contain carriage returns");
+        assert!(
+            !output.contains('⠋'),
+            "non-TTY output must not contain spinner frames"
+        );
+        assert!(
+            !output.contains('\r'),
+            "non-TTY output must not contain carriage returns"
+        );
         assert_eq!(output, "✔ Loading...\n");
     }
 
@@ -453,7 +474,10 @@ mod tests {
         handle.success();
 
         let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        assert!(output.contains("\x1b["), "TTY output should contain ANSI escape codes");
+        assert!(
+            output.contains("\x1b["),
+            "TTY output should contain ANSI escape codes"
+        );
         assert!(output.contains("✔"), "TTY output should contain ✔");
         assert!(output.contains(GREEN), "TTY output should contain GREEN");
     }
@@ -477,4 +501,3 @@ mod tests {
         }
     }
 }
-
