@@ -25,7 +25,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Generate coverage
-        run: cargo tarpaulin --out lcov --output-dir ./coverage
+        run: cargo tarpaulin --engine llvm --out lcov --output-dir ./coverage
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
         with:

@@ -119,3 +119,109 @@ fn test_tty_mode_produces_ansi_and_animation() {
     );
     assert!(output.contains("✔"), "TTY output should contain ✔");
 }
+
+#[test]
+fn test_tty_mode_fail_emits_ansi_codes() {
+    let inner = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let writer = SharedBuffer(Arc::clone(&inner));
+
+    let spinner = Spinner::with_writer_tty("message", writer, true);
+    let handle = spinner.start();
+    thread::sleep(Duration::from_millis(200));
+    handle.fail();
+
+    let output = String::from_utf8(inner.lock().unwrap().clone()).unwrap();
+
+    // Should contain red ANSI color code
+    assert!(
+        output.contains("\x1b[31m"),
+        "TTY fail output should contain red ANSI code"
+    );
+    // Should contain the ✖ symbol
+    assert!(output.contains("✖"), "TTY fail output should contain ✖");
+    // Should contain the original message
+    assert!(
+        output.contains("message"),
+        "TTY fail output should contain the message"
+    );
+    // Should contain ANSI reset code
+    assert!(
+        output.contains("\x1b[0m"),
+        "TTY fail output should contain reset ANSI code"
+    );
+    // Should contain spinner animation frames (confirming TTY mode ran)
+    assert!(
+        output.contains('⠋'),
+        "TTY fail output should contain spinner frames"
+    );
+}
+
+#[test]
+fn test_tty_mode_fail_with_emits_ansi_codes() {
+    let inner = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let writer = SharedBuffer(Arc::clone(&inner));
+
+    let spinner = Spinner::with_writer_tty("original", writer, true);
+    let handle = spinner.start();
+    thread::sleep(Duration::from_millis(200));
+    handle.fail_with("replacement message");
+
+    let output = String::from_utf8(inner.lock().unwrap().clone()).unwrap();
+
+    // Should contain red ANSI color code
+    assert!(
+        output.contains("\x1b[31m"),
+        "TTY fail_with output should contain red ANSI code"
+    );
+    // Should contain the ✖ symbol
+    assert!(output.contains("✖"), "TTY fail_with output should contain ✖");
+    // Should contain the replacement message
+    assert!(
+        output.contains("replacement message"),
+        "TTY fail_with output should contain the replacement message"
+    );
+    // Should contain ANSI reset code
+    assert!(
+        output.contains("\x1b[0m"),
+        "TTY fail_with output should contain reset ANSI code"
+    );
+    // Should contain spinner animation frames (confirming TTY mode ran)
+    assert!(
+        output.contains('⠋'),
+        "TTY fail_with output should contain spinner frames"
+    );
+}
+
+#[test]
+fn test_with_writer_tty_false_behaves_as_non_tty() {
+    let inner = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let writer = SharedBuffer(Arc::clone(&inner));
+
+    let spinner = Spinner::with_writer_tty("message", writer, false);
+    let handle = spinner.start();
+    thread::sleep(Duration::from_millis(200));
+    handle.success();
+
+    let output = String::from_utf8(inner.lock().unwrap().clone()).unwrap();
+
+    // No ANSI escape codes
+    assert!(
+        !output.contains("\x1b["),
+        "with_writer_tty(false) output must not contain ANSI escape codes"
+    );
+    // No carriage returns
+    assert!(
+        !output.contains('\r'),
+        "with_writer_tty(false) output must not contain carriage returns"
+    );
+    // No spinner frames
+    assert!(
+        !output.contains('⠋'),
+        "with_writer_tty(false) output must not contain spinner frames"
+    );
+    // Exact plain text output
+    assert_eq!(output, "✔ message\n");
+}
+
+
+

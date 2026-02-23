@@ -411,6 +411,74 @@ mod tests {
             // Clean up: stop the spinner
             drop(handle);
         }
+
+    }
+
+    // TTY property tests use fewer cases (20) since each spawns a thread + sleeps
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(20))]
+
+        /// Feature: test-coverage-improvement, Property 1: TTY fail output contains ANSI codes, symbol, and message
+        /// **Validates: Requirements 1.1, 1.2, 1.3**
+        #[test]
+        fn property_tty_fail_output_contains_ansi_symbol_and_message(
+            msg in "[^\x00]{1,50}"
+        ) {
+            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+            let writer = TestWriter(Arc::clone(&buf));
+
+            let spinner = Spinner::with_writer_tty(msg.clone(), writer, true);
+            let handle = spinner.start();
+            thread::sleep(Duration::from_millis(100));
+            handle.fail();
+
+            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            prop_assert!(output.contains(RED), "TTY fail output must contain RED ANSI code");
+            prop_assert!(output.contains("✖"), "TTY fail output must contain ✖ symbol");
+            prop_assert!(output.contains(&msg), "TTY fail output must contain the message");
+            prop_assert!(output.contains(RESET), "TTY fail output must contain RESET ANSI code");
+        }
+
+        /// Feature: test-coverage-improvement, Property 2: TTY fail_with output contains ANSI codes, symbol, and replacement message
+        /// **Validates: Requirements 2.1, 2.2, 2.3**
+        #[test]
+        fn property_tty_fail_with_output_contains_ansi_symbol_and_replacement(
+            original in "[^\x00]{1,50}",
+            replacement in "[^\x00]{1,50}"
+        ) {
+            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+            let writer = TestWriter(Arc::clone(&buf));
+
+            let spinner = Spinner::with_writer_tty(original, writer, true);
+            let handle = spinner.start();
+            thread::sleep(Duration::from_millis(100));
+            handle.fail_with(replacement.clone());
+
+            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            prop_assert!(output.contains(RED), "TTY fail_with output must contain RED ANSI code");
+            prop_assert!(output.contains("✖"), "TTY fail_with output must contain ✖ symbol");
+            prop_assert!(output.contains(&replacement), "TTY fail_with output must contain the replacement message");
+            prop_assert!(output.contains(RESET), "TTY fail_with output must contain RESET ANSI code");
+        }
+
+        /// Feature: test-coverage-improvement, Property 3: with_writer_tty(false) produces identical output to with_writer
+        /// **Validates: Requirements 3.1, 3.2**
+        #[test]
+        fn property_with_writer_tty_false_produces_plain_output(
+            msg in "[^\x00]{1,50}"
+        ) {
+            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+            let writer = TestWriter(Arc::clone(&buf));
+
+            let spinner = Spinner::with_writer_tty(msg.clone(), writer, false);
+            let handle = spinner.start();
+            handle.success();
+
+            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            prop_assert!(!output.contains("\x1b["), "with_writer_tty(false) output must not contain ANSI codes");
+            let expected = format!("✔ {}\n", msg);
+            prop_assert_eq!(output, expected, "with_writer_tty(false) must produce plain text output");
+        }
     }
 
     #[test]

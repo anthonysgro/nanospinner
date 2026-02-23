@@ -1,3 +1,4 @@
 .kiro
 target
 Cargo.lock
+.coverage
