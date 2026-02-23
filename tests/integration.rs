@@ -174,7 +174,10 @@ fn test_tty_mode_fail_with_emits_ansi_codes() {
         "TTY fail_with output should contain red ANSI code"
     );
     // Should contain the ✖ symbol
-    assert!(output.contains("✖"), "TTY fail_with output should contain ✖");
+    assert!(
+        output.contains("✖"),
+        "TTY fail_with output should contain ✖"
+    );
     // Should contain the replacement message
     assert!(
         output.contains("replacement message"),
@@ -222,6 +225,3 @@ fn test_with_writer_tty_false_behaves_as_non_tty() {
     // Exact plain text output
     assert_eq!(output, "✔ message\n");
 }
-
-
-
