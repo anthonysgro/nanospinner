@@ -230,13 +230,13 @@ fn spin_loop(
     let mut i = 0;
     while !stop_flag.load(Ordering::Relaxed) {
         let msg = message.lock().unwrap().clone();
-        let frame = frames[i % frames.len()];
+        let frame = frames[i];
         let output = format_frame(frame, &msg);
         let mut w = writer.lock().unwrap();
         write!(w, "{}", output).unwrap();
         w.flush().unwrap();
         drop(w);
-        i += 1;
+        i = (i + 1) % frames.len();
         thread::sleep(interval);
     }
 }
