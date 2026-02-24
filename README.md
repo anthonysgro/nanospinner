@@ -15,6 +15,7 @@ Part of the nano crate family — minimal, zero-dependency building blocks for f
 - [nanoprogress](https://github.com/anthonysgro/nanoprogress) — progress bars
 - [nanologger](https://github.com/anthonysgro/nanologger) — minimal logger
 - [nanotime](https://github.com/anthonysgro/nanotime) — time utilities
+- [nanoargs](https://github.com/anthonysgro/nanoargs) — argument parser
 
 ## Motivation
 
