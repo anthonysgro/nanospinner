@@ -33,7 +33,7 @@ pub struct SpinnerHandle {
     stop_flag: Arc<AtomicBool>,
     message: Arc<Mutex<String>>,
     writer: Arc<Mutex<Box<dyn io::Write + Send>>>,
-    thread: Option<JoinHandle<()>>,
+    thread: Mutex<Option<JoinHandle<()>>>,
     is_tty: bool,
 }
 
@@ -114,7 +114,7 @@ impl<W: io::Write + Send + 'static> Spinner<W> {
             stop_flag,
             message,
             writer,
-            thread,
+            thread: Mutex::new(thread),
             is_tty,
         }
     }
@@ -154,9 +154,9 @@ impl SpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
+        if let Some(thread) = self.thread.lock().unwrap().take() {
             let _ = thread.join();
         }
         if self.is_tty {
@@ -170,7 +170,7 @@ impl SpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn success(mut self) {
+    pub fn success(self) {
         let msg = self.message.lock().unwrap().clone();
         self.stop();
         let output = if self.is_tty {
@@ -187,7 +187,7 @@ impl SpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn success_with(mut self, message: impl Into<String>) {
+    pub fn success_with(self, message: impl Into<String>) {
         self.stop();
         let msg = message.into();
         let output = if self.is_tty {
@@ -204,7 +204,7 @@ impl SpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn fail(mut self) {
+    pub fn fail(self) {
         let msg = self.message.lock().unwrap().clone();
         self.stop();
         let output = if self.is_tty {
@@ -221,7 +221,7 @@ impl SpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn fail_with(mut self, message: impl Into<String>) {
+    pub fn fail_with(self, message: impl Into<String>) {
         self.stop();
         let msg = message.into();
         let output = if self.is_tty {
@@ -238,7 +238,7 @@ impl SpinnerHandle {
 impl Drop for SpinnerHandle {
     fn drop(&mut self) {
         self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
+        if let Some(thread) = self.thread.get_mut().unwrap().take() {
             let _ = thread.join();
         }
     }
@@ -366,7 +366,7 @@ mod tests {
     fn test_with_writer_uses_provided_writer() {
         let buf = Vec::<u8>::new();
         let spinner = Spinner::with_writer("test", buf);
-        let mut handle = spinner.start();
+        let handle = spinner.start();
         thread::sleep(Duration::from_millis(100));
         handle.stop();
     }

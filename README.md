@@ -115,7 +115,7 @@ handle.success();
 #### Stop without a symbol
 
 ```rust
-let mut handle = Spinner::new("Working...").start();
+let handle = Spinner::new("Working...").start();
 thread::sleep(Duration::from_secs(1));
 handle.stop(); // clears the line, no symbol printed
 ```

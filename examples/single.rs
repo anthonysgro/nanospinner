@@ -47,7 +47,7 @@ fn main() {
     thread::sleep(Duration::from_millis(500));
 
     // Stop without symbol
-    let mut handle = Spinner::new("Temporary task...").start();
+    let handle = Spinner::new("Temporary task...").start();
     thread::sleep(Duration::from_secs(2));
     handle.stop();
 }
