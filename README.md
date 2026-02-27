@@ -15,7 +15,6 @@ Most Rust spinner crates (like `indicatif` or `spinoff`) are feature-rich but pu
 `nanospinner` solves this by providing the essentials and nothing more:
 
 - Zero external dependencies (only `std`)
-- Tiny footprint (< 700 LOC)
 - Simple, ergonomic API
 - Thread-safe with clean shutdown
 
