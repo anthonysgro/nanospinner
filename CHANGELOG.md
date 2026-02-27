@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2]
+
+### Changed
+
+- Internal: reordered module items in `multi.rs` and `spinner.rs` to follow idiomatic Rust conventions — types and structs first, impl blocks grouped with their type, private helper functions at the bottom
+
 ## [0.3.1]
 
 ### Changed
@@ -110,7 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Drop` implementation for clean shutdown
 - Zero dependencies (only `std`)
 
-[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/anthonysgro/nanospinner/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/anthonysgro/nanospinner/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/anthonysgro/nanospinner/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/anthonysgro/nanospinner/compare/v0.2.4...v0.2.5

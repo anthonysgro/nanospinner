@@ -24,20 +24,6 @@ pub struct Spinner<W: io::Write + Send + 'static = io::Stdout> {
     is_tty: bool,
 }
 
-/// Handle for controlling a running spinner.
-///
-/// Returned by [`Spinner::start`]. Use [`SpinnerHandle::update`] to change
-/// the message mid-spin, and finalize with [`SpinnerHandle::success`] or
-/// [`SpinnerHandle::fail`]. Dropping the handle will automatically stop
-/// the background thread.
-pub struct SpinnerHandle {
-    stop_flag: Arc<AtomicBool>,
-    message: Arc<Mutex<String>>,
-    writer: Arc<Mutex<Box<dyn io::Write + Send>>>,
-    thread: Mutex<Option<JoinHandle<()>>>,
-    is_tty: bool,
-}
-
 impl Spinner {
     /// Create a new spinner with the given message, writing to stdout.
     ///
@@ -121,25 +107,18 @@ impl<W: io::Write + Send + 'static> Spinner<W> {
     }
 }
 
-fn spin_loop(
-    frames: &[char],
-    interval: Duration,
-    stop_flag: &Arc<AtomicBool>,
-    message: &Arc<Mutex<String>>,
-    writer: &Arc<Mutex<Box<dyn io::Write + Send>>>,
-) {
-    let mut i = 0;
-    while !stop_flag.load(Ordering::Acquire) {
-        let msg = message.lock().unwrap().clone();
-        let frame = frames[i];
-        let output = format_frame(frame, &msg);
-        let mut w = writer.lock().unwrap();
-        write!(w, "{output}").unwrap();
-        w.flush().unwrap();
-        drop(w);
-        i = (i + 1) % frames.len();
-        thread::sleep(interval);
-    }
+/// Handle for controlling a running spinner.
+///
+/// Returned by [`Spinner::start`]. Use [`SpinnerHandle::update`] to change
+/// the message mid-spin, and finalize with [`SpinnerHandle::success`] or
+/// [`SpinnerHandle::fail`]. Dropping the handle will automatically stop
+/// the background thread.
+pub struct SpinnerHandle {
+    stop_flag: Arc<AtomicBool>,
+    message: Arc<Mutex<String>>,
+    writer: Arc<Mutex<Box<dyn io::Write + Send>>>,
+    thread: Mutex<Option<JoinHandle<()>>>,
+    is_tty: bool,
 }
 
 impl SpinnerHandle {
@@ -313,6 +292,27 @@ impl SpinnerHandle {
 impl Drop for SpinnerHandle {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+fn spin_loop(
+    frames: &[char],
+    interval: Duration,
+    stop_flag: &Arc<AtomicBool>,
+    message: &Arc<Mutex<String>>,
+    writer: &Arc<Mutex<Box<dyn io::Write + Send>>>,
+) {
+    let mut i = 0;
+    while !stop_flag.load(Ordering::Acquire) {
+        let msg = message.lock().unwrap().clone();
+        let frame = frames[i];
+        let output = format_frame(frame, &msg);
+        let mut w = writer.lock().unwrap();
+        write!(w, "{output}").unwrap();
+        w.flush().unwrap();
+        drop(w);
+        i = (i + 1) % frames.len();
+        thread::sleep(interval);
     }
 }
 

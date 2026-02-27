@@ -6,103 +6,6 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-fn multi_spin_loop(
-    frames: &[char],
-    interval: Duration,
-    stop_flag: &Arc<AtomicBool>,
-    lines: &Arc<Mutex<Vec<SpinnerLine>>>,
-    writer: &Arc<Mutex<Box<dyn io::Write + Send>>>,
-    last_visible_count: &Arc<AtomicUsize>,
-) {
-    let mut frame_idx: usize = 0;
-    let mut prev_line_count: usize = 0;
-
-    while !stop_flag.load(Ordering::Acquire) {
-        // 1-2-3: Lock, clone state, release.
-        let snapshot = lines.lock().unwrap().clone();
-
-        if !snapshot.is_empty() {
-            let mut w = writer.lock().unwrap();
-
-            // 4: Move cursor up to overwrite previous frame (skip on first frame).
-            if prev_line_count > 0 {
-                write!(w, "\x1b[{prev_line_count}A").unwrap();
-            }
-
-            // 5: Redraw each visible line.
-            let frame_char = frames[frame_idx % frames.len()];
-            let mut visible_count: usize = 0;
-            for line in &snapshot {
-                match &line.status {
-                    LineStatus::Active => {
-                        write!(w, "\r{}{} {}\n", CLEAR_LINE, frame_char, line.message).unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::Succeeded => {
-                        write!(w, "\r{}{}✔{} {}\n", CLEAR_LINE, GREEN, RESET, line.message)
-                            .unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::SucceededWith(msg) => {
-                        write!(w, "\r{CLEAR_LINE}{GREEN}✔{RESET} {msg}\n").unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::Failed => {
-                        write!(w, "\r{}{}✖{} {}\n", CLEAR_LINE, RED, RESET, line.message).unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::FailedWith(msg) => {
-                        write!(w, "\r{CLEAR_LINE}{RED}✖{RESET} {msg}\n").unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::Warned => {
-                        write!(w, "\r{}{}⚠{} {}\n", CLEAR_LINE, YELLOW, RESET, line.message)
-                            .unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::WarnedWith(msg) => {
-                        write!(w, "\r{CLEAR_LINE}{YELLOW}⚠{RESET} {msg}\n").unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::Informed => {
-                        write!(w, "\r{}{}ℹ{} {}\n", CLEAR_LINE, BLUE, RESET, line.message).unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::InformedWith(msg) => {
-                        write!(w, "\r{CLEAR_LINE}{BLUE}ℹ{RESET} {msg}\n").unwrap();
-                        visible_count += 1;
-                    }
-                    LineStatus::Cleared => { /* skip — no output */ }
-                }
-            }
-
-            // 6: Erase vacated rows left by cleared lines.
-            let vacated = prev_line_count.saturating_sub(visible_count);
-            for _ in 0..vacated {
-                write!(w, "\r{CLEAR_LINE}\n").unwrap();
-            }
-            // Move cursor back up past the vacated rows so it sits right
-            // after the visible lines — keeps prev_line_count correct.
-            if vacated > 0 {
-                write!(w, "\x1b[{vacated}A").unwrap();
-            }
-
-            // 7: Flush the writer.
-            w.flush().unwrap();
-            prev_line_count = visible_count;
-            last_visible_count.store(visible_count, Ordering::Relaxed);
-        }
-
-        // 6: Advance the global frame counter.
-        frame_idx = frame_idx.wrapping_add(1);
-        thread::sleep(interval);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Multi-spinner types
-// ---------------------------------------------------------------------------
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum LineStatus {
     /// Still animating.
@@ -232,16 +135,6 @@ pub struct MultiSpinnerHandle {
     last_visible_count: Arc<AtomicUsize>,
 }
 
-/// Handle for controlling a single spinner line within a multi-spinner group.
-///
-/// `SpinnerLineHandle` is [`Send`] so it can be moved to worker threads.
-pub struct SpinnerLineHandle {
-    index: usize,
-    lines: Arc<Mutex<Vec<SpinnerLine>>>,
-    writer: Arc<Mutex<Box<dyn io::Write + Send>>>,
-    is_tty: bool,
-}
-
 impl MultiSpinnerHandle {
     /// Add a new spinner line with the given message and return a handle to
     /// control it.
@@ -352,6 +245,16 @@ impl Drop for MultiSpinnerHandle {
     fn drop(&mut self) {
         self.shutdown();
     }
+}
+
+/// Handle for controlling a single spinner line within a multi-spinner group.
+///
+/// `SpinnerLineHandle` is [`Send`] so it can be moved to worker threads.
+pub struct SpinnerLineHandle {
+    index: usize,
+    lines: Arc<Mutex<Vec<SpinnerLine>>>,
+    writer: Arc<Mutex<Box<dyn io::Write + Send>>>,
+    is_tty: bool,
 }
 
 impl SpinnerLineHandle {
@@ -506,6 +409,99 @@ impl SpinnerLineHandle {
         let mut lines = self.lines.lock().unwrap();
         lines[self.index].status = LineStatus::Cleared;
         // No writer interaction — the line is silently dismissed.
+    }
+}
+
+fn multi_spin_loop(
+    frames: &[char],
+    interval: Duration,
+    stop_flag: &Arc<AtomicBool>,
+    lines: &Arc<Mutex<Vec<SpinnerLine>>>,
+    writer: &Arc<Mutex<Box<dyn io::Write + Send>>>,
+    last_visible_count: &Arc<AtomicUsize>,
+) {
+    let mut frame_idx: usize = 0;
+    let mut prev_line_count: usize = 0;
+
+    while !stop_flag.load(Ordering::Acquire) {
+        // 1-2-3: Lock, clone state, release.
+        let snapshot = lines.lock().unwrap().clone();
+
+        if !snapshot.is_empty() {
+            let mut w = writer.lock().unwrap();
+
+            // 4: Move cursor up to overwrite previous frame (skip on first frame).
+            if prev_line_count > 0 {
+                write!(w, "\x1b[{prev_line_count}A").unwrap();
+            }
+
+            // 5: Redraw each visible line.
+            let frame_char = frames[frame_idx % frames.len()];
+            let mut visible_count: usize = 0;
+            for line in &snapshot {
+                match &line.status {
+                    LineStatus::Active => {
+                        write!(w, "\r{}{} {}\n", CLEAR_LINE, frame_char, line.message).unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::Succeeded => {
+                        write!(w, "\r{}{}✔{} {}\n", CLEAR_LINE, GREEN, RESET, line.message)
+                            .unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::SucceededWith(msg) => {
+                        write!(w, "\r{CLEAR_LINE}{GREEN}✔{RESET} {msg}\n").unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::Failed => {
+                        write!(w, "\r{}{}✖{} {}\n", CLEAR_LINE, RED, RESET, line.message).unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::FailedWith(msg) => {
+                        write!(w, "\r{CLEAR_LINE}{RED}✖{RESET} {msg}\n").unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::Warned => {
+                        write!(w, "\r{}{}⚠{} {}\n", CLEAR_LINE, YELLOW, RESET, line.message)
+                            .unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::WarnedWith(msg) => {
+                        write!(w, "\r{CLEAR_LINE}{YELLOW}⚠{RESET} {msg}\n").unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::Informed => {
+                        write!(w, "\r{}{}ℹ{} {}\n", CLEAR_LINE, BLUE, RESET, line.message).unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::InformedWith(msg) => {
+                        write!(w, "\r{CLEAR_LINE}{BLUE}ℹ{RESET} {msg}\n").unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::Cleared => { /* skip — no output */ }
+                }
+            }
+
+            // 6: Erase vacated rows left by cleared lines.
+            let vacated = prev_line_count.saturating_sub(visible_count);
+            for _ in 0..vacated {
+                write!(w, "\r{CLEAR_LINE}\n").unwrap();
+            }
+            // Move cursor back up past the vacated rows so it sits right
+            // after the visible lines — keeps prev_line_count correct.
+            if vacated > 0 {
+                write!(w, "\x1b[{vacated}A").unwrap();
+            }
+
+            // 7: Flush the writer.
+            w.flush().unwrap();
+            prev_line_count = visible_count;
+            last_visible_count.store(visible_count, Ordering::Relaxed);
+        }
+
+        // 6: Advance the global frame counter.
+        frame_idx = frame_idx.wrapping_add(1);
+        thread::sleep(interval);
     }
 }
 
