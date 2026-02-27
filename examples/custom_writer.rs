@@ -22,7 +22,7 @@ fn main() {
     thread::sleep(Duration::from_millis(500));
 
     // Multi-spinner on stderr.
-    let mut handle = MultiSpinner::with_writer(io::stderr()).start();
+    let handle = MultiSpinner::with_writer(io::stderr()).start();
 
     let build = handle.add("Building project...");
     let lint = handle.add("Running linter...");

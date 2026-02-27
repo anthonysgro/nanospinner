@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2]
+
+### Changed
+
+- `MultiSpinnerHandle::stop()` now takes `&self` instead of `&mut self` for consistent interior mutability API — callers no longer need `mut` bindings just to call `stop()`
+
 ## [0.2.1]
 
 ### Changed
@@ -62,7 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Drop` implementation for clean shutdown
 - Zero dependencies (only `std`)
 
-[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/anthonysgro/nanospinner/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/anthonysgro/nanospinner/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/anthonysgro/nanospinner/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/anthonysgro/nanospinner/compare/v0.1.1...v0.1.2

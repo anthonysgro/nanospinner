@@ -1,6 +1,6 @@
 [package]
 name = "nanospinner"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "A minimal, zero-dependency terminal spinner for Rust CLI applications"
 license = "MIT"
@@ -12,8 +12,7 @@ exclude = [
     "proptest-regressions/",
     ".github/",
     "demo.gif",
-    "demo.tape",
-    ".instructions"
+    "demo.tape"
 ]
 
 [dependencies]

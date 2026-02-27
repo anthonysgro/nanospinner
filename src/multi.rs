@@ -189,7 +189,7 @@ impl<W: io::Write + Send + 'static> MultiSpinner<W> {
             lines,
             writer,
             stop_flag,
-            thread,
+            thread: Mutex::new(thread),
             is_tty,
             last_visible_count,
         }
@@ -202,7 +202,7 @@ pub struct MultiSpinnerHandle {
     lines: Arc<Mutex<Vec<SpinnerLine>>>,
     writer: Arc<Mutex<Box<dyn io::Write + Send>>>,
     stop_flag: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
+    thread: Mutex<Option<JoinHandle<()>>>,
     is_tty: bool,
     last_visible_count: Arc<AtomicUsize>,
 }
@@ -246,9 +246,9 @@ impl MultiSpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
+        if let Some(thread) = self.thread.lock().unwrap().take() {
             let _ = thread.join();
         }
         if self.is_tty {
@@ -300,7 +300,7 @@ impl MultiSpinnerHandle {
 impl Drop for MultiSpinnerHandle {
     fn drop(&mut self) {
         self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
+        if let Some(thread) = self.thread.get_mut().unwrap().take() {
             let _ = thread.join();
         }
     }
@@ -425,7 +425,7 @@ mod tests {
         let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
         let writer = TestWriter(Arc::clone(&buf));
 
-        let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
         let line = handle.add("Compiling crate");
         thread::sleep(Duration::from_millis(200));
         line.success();
@@ -463,7 +463,7 @@ mod tests {
         let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
         let writer = TestWriter(Arc::clone(&buf));
 
-        let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
         // Add spinner A and finalize it
         let line_a = handle.add("Task A");
@@ -499,12 +499,12 @@ mod tests {
         let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
         let writer = TestWriter(Arc::clone(&buf));
 
-        let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
         let _line = handle.add("Working");
         thread::sleep(Duration::from_millis(100));
         handle.stop();
         // The fact that we reach this point means stop() joined the thread without hanging.
-        assert!(handle.thread.is_none(), "thread must be None after stop()");
+        assert!(handle.thread.lock().unwrap().is_none(), "thread must be None after stop()");
     }
 
     #[test]
@@ -589,7 +589,7 @@ mod tests {
         let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
         let writer = TestWriter(Arc::clone(&buf));
 
-        let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
         let line1 = handle.add("first-line");
         let line2 = handle.add("second-line");
@@ -656,7 +656,7 @@ mod tests {
         let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
         let writer = TestWriter(Arc::clone(&buf));
 
-        let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
         let line1 = handle.add("alpha");
         let line2 = handle.add("beta");
@@ -1001,7 +1001,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add two spinner lines
             let line1 = handle.add(success_msg.clone());
@@ -1074,7 +1074,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add all lines
             let handles: Vec<SpinnerLineHandle> = messages
@@ -1162,7 +1162,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add all lines
             let handles: Vec<SpinnerLineHandle> = messages
@@ -1282,7 +1282,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add all spinner lines
             let handles: Vec<SpinnerLineHandle> = (0..count)
@@ -1357,7 +1357,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add all spinner lines
             let handles: Vec<SpinnerLineHandle> = (0..count)
@@ -1442,7 +1442,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add N spinner lines (all remain Active — no clears, no finalization)
             let _handles: Vec<SpinnerLineHandle> = (0..num_spinners)
@@ -1515,7 +1515,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add spinner lines
             let handles: Vec<SpinnerLineHandle> = (0..count)
@@ -1580,7 +1580,7 @@ mod tests {
             let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
             let writer = TestWriter(Arc::clone(&buf));
 
-            let mut handle = MultiSpinner::with_writer_tty(writer, true).start();
+            let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
             // Add spinner lines with unique messages
             let messages: Vec<String> = (0..count)

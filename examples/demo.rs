@@ -17,7 +17,7 @@ fn main() {
     thread::sleep(Duration::from_millis(500));
 
     // Multi-spinner — parallel tasks with mixed outcomes.
-    let mut handle = MultiSpinner::new().start();
+    let handle = MultiSpinner::new().start();
 
     let build = handle.add("Building project...");
     let lint = handle.add("Running linter...");

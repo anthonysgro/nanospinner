@@ -10,7 +10,7 @@ fn main() {
     // Basic: add lines, update, finalize with mixed outcomes.
     println!("Basic multi-spinner");
     {
-        let mut handle = MultiSpinner::new().start();
+        let handle = MultiSpinner::new().start();
 
         let a = handle.add("Compiling crate A...");
         let b = handle.add("Compiling crate B...");
@@ -32,7 +32,7 @@ fn main() {
     // Clear: silently dismiss lines.
     println!("\nClear demo");
     {
-        let mut handle = MultiSpinner::new().start();
+        let handle = MultiSpinner::new().start();
 
         let check = handle.add("Running checks...");
         let lint = handle.add("Linting...");
@@ -57,7 +57,7 @@ fn main() {
     // Dynamic: add new lines after others finish.
     println!("\nDynamic add");
     {
-        let mut handle = MultiSpinner::new().start();
+        let handle = MultiSpinner::new().start();
 
         let a = handle.add("Phase 1: Init...");
         let b = handle.add("Phase 1: Validate...");
@@ -81,7 +81,7 @@ fn main() {
     // Thread-based: move handles to worker threads.
     println!("\nThread-based workers");
     {
-        let mut handle = MultiSpinner::new().start();
+        let handle = MultiSpinner::new().start();
 
         let workers: Vec<_> = (1..=4)
             .map(|i| {

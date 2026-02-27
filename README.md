@@ -146,7 +146,7 @@ use nanospinner::MultiSpinner;
 use std::thread;
 use std::time::Duration;
 
-let mut handle = MultiSpinner::new().start();
+let handle = MultiSpinner::new().start();
 
 let line1 = handle.add("Downloading...");
 let line2 = handle.add("Compiling...");
@@ -183,7 +183,7 @@ use nanospinner::MultiSpinner;
 use std::thread;
 use std::time::Duration;
 
-let mut handle = MultiSpinner::new().start();
+let handle = MultiSpinner::new().start();
 
 let line1 = handle.add("Checking cache...");
 let line2 = handle.add("Downloading...");
@@ -209,7 +209,7 @@ use nanospinner::MultiSpinner;
 use std::thread;
 use std::time::Duration;
 
-let mut handle = MultiSpinner::new().start();
+let handle = MultiSpinner::new().start();
 
 let workers: Vec<_> = (1..=3)
     .map(|i| {

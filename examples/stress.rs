@@ -16,7 +16,7 @@ fn main() {
     // Each clear should shrink the block by one row with no ghost lines.
     println!("Phase 1: Sequential clears");
     {
-        let mut h = MultiSpinner::new().start();
+        let h = MultiSpinner::new().start();
         let a = h.add("Compiling core...");
         let b = h.add("Compiling utils...");
         let c = h.add("Compiling api...");
@@ -43,7 +43,7 @@ fn main() {
     // Clear multiple lines in the same frame (before the next 80ms tick).
     println!("\nPhase 2: Simultaneous clears");
     {
-        let mut h = MultiSpinner::new().start();
+        let h = MultiSpinner::new().start();
         let a = h.add("Downloading dep A...");
         let b = h.add("Downloading dep B...");
         let c = h.add("Downloading dep C...");
@@ -67,7 +67,7 @@ fn main() {
     // All lines cleared — stop() should leave zero ghost lines.
     println!("\nPhase 3: Clear all then stop");
     {
-        let mut h = MultiSpinner::new().start();
+        let h = MultiSpinner::new().start();
         let a = h.add("Temp task 1...");
         let b = h.add("Temp task 2...");
         let c = h.add("Temp task 3...");
@@ -86,7 +86,7 @@ fn main() {
     // Clear some lines, then add new ones — the block should grow back.
     println!("\nPhase 4: Add after clear");
     {
-        let mut h = MultiSpinner::new().start();
+        let h = MultiSpinner::new().start();
         let a = h.add("Step 1: Init...");
         let b = h.add("Step 2: Validate...");
         let c = h.add("Step 3: Transform...");
@@ -111,7 +111,7 @@ fn main() {
     // Interleave clears, successes, fails, updates, and adds rapidly.
     println!("\nPhase 5: Mixed finalization frenzy");
     {
-        let mut h = MultiSpinner::new().start();
+        let h = MultiSpinner::new().start();
         let a = h.add("Lint...");
         let b = h.add("Typecheck...");
         let c = h.add("Unit tests...");

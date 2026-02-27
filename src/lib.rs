@@ -104,7 +104,7 @@
 //! use std::thread;
 //! use std::time::Duration;
 //!
-//! let mut handle = MultiSpinner::new().start();
+//! let handle = MultiSpinner::new().start();
 //!
 //! let line1 = handle.add("Compiling crate A...");
 //! let line2 = handle.add("Compiling crate B...");
