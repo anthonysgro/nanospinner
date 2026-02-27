@@ -504,7 +504,10 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         handle.stop();
         // The fact that we reach this point means stop() joined the thread without hanging.
-        assert!(handle.thread.lock().unwrap().is_none(), "thread must be None after stop()");
+        assert!(
+            handle.thread.lock().unwrap().is_none(),
+            "thread must be None after stop()"
+        );
     }
 
     #[test]
