@@ -1,6 +1,6 @@
 [package]
 name = "nanospinner"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "A minimal, zero-dependency terminal spinner for Rust CLI applications"
 license = "MIT"
@@ -8,6 +8,13 @@ repository = "https://github.com/anthonysgro/nanospinner"
 keywords = ["spinner", "terminal", "cli", "progress", "tui"]
 categories = ["command-line-interface"]
 readme = "README.md"
+exclude = [
+    "proptest-regressions/",
+    ".github/",
+    "demo.gif",
+    "demo.tape",
+    ".instructions"
+]
 
 [dependencies]
 

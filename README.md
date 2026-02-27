@@ -1,21 +1,12 @@
 # ⠋ nanospinner [![Build Status](https://github.com/anthonysgro/nanospinner/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/anthonysgro/nanospinner/actions) [![Crates.io](https://img.shields.io/crates/v/nanospinner)](https://crates.io/crates/nanospinner) [![Docs.rs](https://docs.rs/nanospinner/badge.svg)](https://docs.rs/nanospinner/latest/nanospinner/) [![License](https://img.shields.io/crates/l/nanospinner)](https://crates.io/crates/nanospinner) [![Coverage Status](https://coveralls.io/repos/github/anthonysgro/nanospinner/badge.svg?branch=main)](https://coveralls.io/github/anthonysgro/nanospinner?branch=main)
 
-A minimal, zero-dependency terminal spinner for Rust applications.
+A minimal, zero-dependency terminal spinner for Rust applications. Supports single and multi-spinner modes.
 
 ![demo](demo.gif)
 
-Inspired by the [nanospinner](https://github.com/usmanyunusov/nanospinner) npm package, `nanospinner` gives you a lightweight animated spinner using only the Rust standard library — no heavy crates, no transitive dependencies, under 200 lines of code.
+Inspired by the [nanospinner](https://github.com/usmanyunusov/nanospinner) npm package, `nanospinner` gives you a lightweight animated spinner using only the Rust standard library — no heavy crates, no transitive dependencies, under 700 lines of code.
 
-## Nano Suite
-
-Part of the nano crate family — minimal, zero-dependency building blocks for focused apps in Rust:
-
-- [nanocolor](https://github.com/anthonysgro/nanocolor) — terminal colors and styles
-- [nanospinner](https://github.com/anthonysgro/nanospinner) — terminal spinners
-- [nanoprogress](https://github.com/anthonysgro/nanoprogress) — progress bars
-- [nanologger](https://github.com/anthonysgro/nanologger) — minimal logger
-- [nanotime](https://github.com/anthonysgro/nanotime) — time utilities
-- [nanoargs](https://github.com/anthonysgro/nanoargs) — argument parser
+Part of the [nano](https://github.com/anthonysgro/nano) crate family — zero-dependency building blocks for Rust.
 
 ## Motivation
 
@@ -24,17 +15,20 @@ Most Rust spinner crates (like `indicatif` or `spinoff`) are feature-rich but pu
 `nanospinner` solves this by providing the essentials and nothing more:
 
 - Zero external dependencies (only `std`)
-- Tiny footprint (< 200 LOC)
+- Tiny footprint (< 700 LOC)
 - Simple, ergonomic API
 - Thread-safe with clean shutdown
 
 ## Comparison
 
-| Crate | Dependencies | Lines of Code | Clean Build Time | Customizable Frames | Progress Bars |
-|-------|-------------|---------------|------------------|---------------------|---------------|
-| `nanospinner` | 0 | ~200 | ~0.1s | Default Braille set | No |
-| `spinoff` | 3+ | ~1,000+ | ~1.2s | Yes (80+ sets) | No |
-| `indicatif` | 5+ | ~5,000+ | ~1.4s | Yes | Yes |
+| | `nanospinner` | `spinoff` | `indicatif` |
+|---|---|---|---|
+| Dependencies | 0 | 4 | 6 |
+| Clean Build Time | ~0.2s | ~1.2s | ~1.4s |
+| Customizable Frames | Default Braille set | Yes (80+ sets) | Yes |
+| Multiple Spinners | Yes | No | Yes |
+| Auto TTY Detection | Yes | No | Yes |
+| Progress Bars | No | No | Yes |
 
 Build times measured from a clean `cargo build --release` on macOS aarch64 (Apple Silicon). Your numbers may vary by platform.
 
@@ -48,6 +42,8 @@ Build times measured from a clean `cargo build --release` on macOS aarch64 (Appl
 - Custom writer support (stdout, stderr, or any `io::Write + Send`)
 - Automatic cleanup via `Drop` — no thread leaks if you forget to stop
 - Automatic TTY detection — ANSI codes and animation are skipped when output is piped or redirected
+- Multi-spinner support — manage multiple concurrent spinners on separate terminal lines
+- Thread-safe SpinnerLineHandle — move individual spinner controls to worker threads
 
 ## Quick Start
 
@@ -71,27 +67,29 @@ fn main() {
 
 ## Usage
 
-### Create and start a spinner
+### Single Spinner
+
+#### Create and start a spinner
 
 ```rust
 let handle = Spinner::new("Downloading files...").start();
 ```
 
-### Finalize with success or failure
+#### Finalize with success or failure
 
 ```rust
 handle.success();           // ✔ Downloading files...
 handle.fail();              // ✖ Downloading files...
 ```
 
-### Finalize with a replacement message
+#### Finalize with a replacement message
 
 ```rust
 handle.success_with("Done!");              // ✔ Done!
 handle.fail_with("Connection timed out");  // ✖ Connection timed out
 ```
 
-### Update the message mid-spin
+#### Update the message mid-spin
 
 ```rust
 let handle = Spinner::new("Step 1...").start();
@@ -101,7 +99,7 @@ thread::sleep(Duration::from_secs(1));
 handle.success_with("All steps complete");
 ```
 
-### Write to a custom destination
+#### Write to a custom destination
 
 ```rust
 use std::io;
@@ -111,7 +109,7 @@ thread::sleep(Duration::from_secs(1));
 handle.success();
 ```
 
-### Stop without a symbol
+#### Stop without a symbol
 
 ```rust
 let mut handle = Spinner::new("Working...").start();
@@ -119,7 +117,7 @@ thread::sleep(Duration::from_secs(1));
 handle.stop(); // clears the line, no symbol printed
 ```
 
-### Piped / non-TTY output
+#### Piped / non-TTY output
 
 When stdout isn't a terminal (e.g. piped to a file or another program), `nanospinner` automatically skips the animation and ANSI color codes. The final result is printed as plain text:
 
@@ -132,6 +130,110 @@ No configuration needed — `Spinner::new()` detects this automatically. If you'
 
 ```rust
 let handle = Spinner::with_writer_tty("Building...", my_writer, true).start();
+```
+
+### Multi-Spinner
+
+For concurrent tasks, `MultiSpinner` manages multiple spinners on separate terminal lines with a single background render thread.
+
+#### Basic usage
+
+```rust
+use nanospinner::MultiSpinner;
+use std::thread;
+use std::time::Duration;
+
+let mut handle = MultiSpinner::new().start();
+
+let line1 = handle.add("Downloading...");
+let line2 = handle.add("Compiling...");
+
+thread::sleep(Duration::from_secs(2));
+line1.success();
+line2.success_with("Compiled successfully!");
+
+handle.stop();
+```
+
+#### Update and finalize individual spinners
+
+```rust
+let line = handle.add("Processing...");
+line.update("Processing (50%)...");
+
+// Finalize with success or failure
+line.success();              // ✔ Processing (50%)...
+line.success_with("Done!");  // ✔ Done!
+line.fail();                 // ✖ Processing (50%)...
+line.fail_with("Error");     // ✖ Error
+
+// Or silently dismiss the line
+line.clear();                // (line disappears, no output)
+```
+
+#### Dismiss a line with clear
+
+Use `clear()` to silently remove a spinner line without printing any symbol or message. Remaining lines collapse together with no gap.
+
+```rust
+use nanospinner::MultiSpinner;
+use std::thread;
+use std::time::Duration;
+
+let mut handle = MultiSpinner::new().start();
+
+let line1 = handle.add("Checking cache...");
+let line2 = handle.add("Downloading...");
+let line3 = handle.add("Compiling...");
+
+thread::sleep(Duration::from_secs(1));
+line1.clear(); // cache check done — dismiss silently
+
+thread::sleep(Duration::from_secs(1));
+line2.success_with("Downloaded!");
+line3.success();
+
+handle.stop();
+// Only the downloaded/compiled lines appear in the final output
+```
+
+#### Thread-based usage
+
+`SpinnerLineHandle` is `Send`, so you can move it to worker threads:
+
+```rust
+use nanospinner::MultiSpinner;
+use std::thread;
+use std::time::Duration;
+
+let mut handle = MultiSpinner::new().start();
+
+let workers: Vec<_> = (1..=3)
+    .map(|i| {
+        let line = handle.add(format!("Worker {i} processing..."));
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(i));
+            line.success_with(format!("Worker {i} done"));
+        })
+    })
+    .collect();
+
+for w in workers {
+    w.join().unwrap();
+}
+
+handle.stop();
+```
+
+#### Piped / non-TTY output
+
+When stdout isn't a terminal, `MultiSpinner` skips animation and the render thread entirely. Each spinner prints a single plain-text result line when finalized:
+
+```bash
+$ my_tool | cat
+✔ Task 1 complete
+✔ Task 2 complete
+✖ Task 3 failed
 ```
 
 ## Contributing
