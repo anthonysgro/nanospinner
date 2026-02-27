@@ -246,63 +246,70 @@ impl MultiSpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn stop(&self) {
+    pub fn stop(self) {
+        self.shutdown();
+    }
+
+    fn shutdown(&self) {
         self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.lock().unwrap().take() {
+        let thread = self.thread.lock().unwrap().take();
+        if let Some(thread) = thread {
             let _ = thread.join();
+            self.render_final();
         }
-        if self.is_tty {
-            let snapshot = self.lines.lock().unwrap().clone();
-            let visible = self.last_visible_count.load(Ordering::Relaxed);
-            if visible > 0 {
-                let mut w = self.writer.lock().unwrap();
-                // Move cursor up to the start of the spinner block.
-                write!(w, "\x1b[{visible}A").unwrap();
-                let mut final_visible: usize = 0;
-                for line in &snapshot {
-                    match &line.status {
-                        LineStatus::Active => {
-                            // Clear the animation for still-active lines.
-                            write!(w, "\r{CLEAR_LINE}\n").unwrap();
-                            final_visible += 1;
-                        }
-                        LineStatus::Succeeded => {
-                            write!(w, "\r{}{}✔{} {}\n", CLEAR_LINE, GREEN, RESET, line.message)
-                                .unwrap();
-                            final_visible += 1;
-                        }
-                        LineStatus::SucceededWith(msg) => {
-                            write!(w, "\r{CLEAR_LINE}{GREEN}✔{RESET} {msg}\n").unwrap();
-                            final_visible += 1;
-                        }
-                        LineStatus::Failed => {
-                            write!(w, "\r{}{}✖{} {}\n", CLEAR_LINE, RED, RESET, line.message)
-                                .unwrap();
-                            final_visible += 1;
-                        }
-                        LineStatus::FailedWith(msg) => {
-                            write!(w, "\r{CLEAR_LINE}{RED}✖{RESET} {msg}\n").unwrap();
-                            final_visible += 1;
-                        }
-                        LineStatus::Cleared => { /* skip — no output */ }
-                    }
+    }
+
+    fn render_final(&self) {
+        if !self.is_tty {
+            return;
+        }
+        let Ok(snapshot) = self.lines.lock().map(|g| g.clone()) else {
+            return;
+        };
+        let visible = self.last_visible_count.load(Ordering::Relaxed);
+        if visible == 0 {
+            return;
+        }
+        let Ok(mut w) = self.writer.lock() else {
+            return;
+        };
+        let _ = write!(w, "\x1b[{visible}A");
+        let mut final_visible: usize = 0;
+        for line in &snapshot {
+            match &line.status {
+                LineStatus::Active => {
+                    let _ = write!(w, "\r{CLEAR_LINE}\n");
+                    final_visible += 1;
                 }
-                // Erase vacated rows left by lines cleared between last render and stop().
-                for _ in 0..visible.saturating_sub(final_visible) {
-                    write!(w, "\r{CLEAR_LINE}\n").unwrap();
+                LineStatus::Succeeded => {
+                    let _ = write!(w, "\r{}{}✔{} {}\n", CLEAR_LINE, GREEN, RESET, line.message);
+                    final_visible += 1;
                 }
-                w.flush().unwrap();
+                LineStatus::SucceededWith(msg) => {
+                    let _ = write!(w, "\r{CLEAR_LINE}{GREEN}✔{RESET} {msg}\n");
+                    final_visible += 1;
+                }
+                LineStatus::Failed => {
+                    let _ = write!(w, "\r{}{}✖{} {}\n", CLEAR_LINE, RED, RESET, line.message);
+                    final_visible += 1;
+                }
+                LineStatus::FailedWith(msg) => {
+                    let _ = write!(w, "\r{CLEAR_LINE}{RED}✖{RESET} {msg}\n");
+                    final_visible += 1;
+                }
+                LineStatus::Cleared => { /* skip — no output */ }
             }
         }
+        for _ in 0..visible.saturating_sub(final_visible) {
+            let _ = write!(w, "\r{CLEAR_LINE}\n");
+        }
+        let _ = w.flush();
     }
 }
 
 impl Drop for MultiSpinnerHandle {
     fn drop(&mut self) {
-        self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.get_mut().unwrap().take() {
-            let _ = thread.join();
-        }
+        self.shutdown();
     }
 }
 
@@ -504,10 +511,6 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         handle.stop();
         // The fact that we reach this point means stop() joined the thread without hanging.
-        assert!(
-            handle.thread.lock().unwrap().is_none(),
-            "thread must be None after stop()"
-        );
     }
 
     #[test]
@@ -520,6 +523,48 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         drop(handle);
         // The fact that we reach this point means drop() joined the thread without hanging.
+    }
+
+    #[test]
+    fn test_multi_spinner_drop_renders_same_as_stop() {
+        // Run with stop()
+        let buf_stop = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let writer = TestWriter(Arc::clone(&buf_stop));
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
+        let a = handle.add("Alpha");
+        let b = handle.add("Beta");
+        thread::sleep(Duration::from_millis(150));
+        a.success_with("Alpha done.");
+        b.fail_with("Beta failed.");
+        thread::sleep(Duration::from_millis(100));
+        handle.stop();
+        let len_stop = buf_stop.lock().unwrap().len();
+
+        // Run with drop (no stop)
+        let buf_drop = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let writer = TestWriter(Arc::clone(&buf_drop));
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
+        let a = handle.add("Alpha");
+        let b = handle.add("Beta");
+        thread::sleep(Duration::from_millis(150));
+        a.success_with("Alpha done.");
+        b.fail_with("Beta failed.");
+        thread::sleep(Duration::from_millis(100));
+        drop(handle);
+        let len_drop = buf_drop.lock().unwrap().len();
+
+        // Both should have produced final render output (not just animation).
+        // Exact byte equality is fragile due to timing, but both should contain
+        // the final status symbols.
+        let out_stop = String::from_utf8(buf_stop.lock().unwrap().clone()).unwrap();
+        let out_drop = String::from_utf8(buf_drop.lock().unwrap().clone()).unwrap();
+        assert!(out_stop.contains("✔"), "stop output must contain ✔");
+        assert!(out_stop.contains("✖"), "stop output must contain ✖");
+        assert!(out_drop.contains("✔"), "drop output must contain ✔");
+        assert!(out_drop.contains("✖"), "drop output must contain ✖");
+        // Both should have written more than just animation frames
+        assert!(len_stop > 0, "stop must produce output");
+        assert!(len_drop > 0, "drop must produce output");
     }
 
     #[test]

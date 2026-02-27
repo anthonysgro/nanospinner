@@ -36,7 +36,7 @@ Build times measured from a clean `cargo build --release` on macOS aarch64 (Appl
 - Colored finalization: green `✔` for success, red `✖` for failure
 - Update the message while the spinner is running
 - Custom writer support (stdout, stderr, or any `io::Write + Send`)
-- Automatic cleanup via `Drop` — no thread leaks if you forget to stop
+- Automatic cleanup via `Drop` — renders final state and joins the background thread, even if you never call `stop()`
 - Automatic TTY detection — ANSI codes and animation are skipped when output is piped or redirected
 - Multi-spinner support — manage multiple concurrent spinners on separate terminal lines
 - Thread-safe SpinnerLineHandle — move individual spinner controls to worker threads
@@ -65,80 +65,73 @@ fn main() {
 
 ### Single Spinner
 
-#### Create and start a spinner
+`Spinner::new(msg).start()` spawns a background thread that animates the spinner. It returns a `SpinnerHandle` you use to update or finalize the spinner. Calling `success()` or `fail()` stops the thread and prints the final line — no separate `stop()` needed. If you drop the handle without finalizing, the thread is joined and the line is cleared automatically.
+
+#### `SpinnerHandle` methods
+
+| Method | Effect |
+|---|---|
+| `update(msg)` | Change the message while spinning |
+| `success()` | Stop and print `✔` with the current message |
+| `success_with(msg)` | Stop and print `✔` with a replacement message |
+| `fail()` | Stop and print `✖` with the current message |
+| `fail_with(msg)` | Stop and print `✖` with a replacement message |
+| `stop()` | Stop and clear the line (no symbol) |
+| *drop* | Same as `stop()` — joins the thread, clears the line |
+
+#### Examples
 
 ```rust
-let handle = Spinner::new("Downloading files...").start();
-```
+use nanospinner::Spinner;
+use std::thread;
+use std::time::Duration;
 
-#### Finalize with success or failure
+// Basic: start, wait, finalize
+let handle = Spinner::new("Downloading...").start();
+thread::sleep(Duration::from_secs(2));
+handle.success(); // ✔ Downloading...
 
-```rust
-handle.success();           // ✔ Downloading files...
-handle.fail();              // ✖ Downloading files...
-```
-
-#### Finalize with a replacement message
-
-```rust
-handle.success_with("Done!");              // ✔ Done!
-handle.fail_with("Connection timed out");  // ✖ Connection timed out
-```
-
-#### Update the message mid-spin
-
-```rust
+// Update mid-spin, finalize with a replacement message
 let handle = Spinner::new("Step 1...").start();
 thread::sleep(Duration::from_secs(1));
 handle.update("Step 2...");
 thread::sleep(Duration::from_secs(1));
-handle.success_with("All steps complete");
-```
-
-#### Write to a custom destination
-
-```rust
-use std::io;
-
-let handle = Spinner::with_writer("Processing...", io::stderr()).start();
-thread::sleep(Duration::from_secs(1));
-handle.success();
-```
-
-#### Stop without a symbol
-
-```rust
-let handle = Spinner::new("Working...").start();
-thread::sleep(Duration::from_secs(1));
-handle.stop(); // clears the line, no symbol printed
-```
-
-#### Piped / non-TTY output
-
-When stdout isn't a terminal (e.g. piped to a file or another program), `nanospinner` automatically skips the animation and ANSI color codes. The final result is printed as plain text:
-
-```bash
-$ my_tool | cat
-✔ Done!
-```
-
-No configuration needed — `Spinner::new()` detects this automatically. If you're using a custom writer and want to force TTY behavior, use `with_writer_tty`:
-
-```rust
-let handle = Spinner::with_writer_tty("Building...", my_writer, true).start();
+handle.success_with("All steps complete"); // ✔ All steps complete
 ```
 
 ### Multi-Spinner
 
-For concurrent tasks, `MultiSpinner` manages multiple spinners on separate terminal lines with a single background render thread.
+`MultiSpinner` manages multiple spinner lines with a single background render thread. The key difference from a single spinner: finalizing a line (`success`, `fail`, `clear`) only updates that line's status — the render thread keeps running and redraws all lines each frame. You must call `stop()` on the group handle (or let it drop) to shut down the render thread.
 
-#### Basic usage
+#### `MultiSpinnerHandle` methods
+
+| Method | Effect |
+|---|---|
+| `add(msg)` | Add a spinner line, returns a `SpinnerLineHandle` |
+| `stop()` | Stop the render thread and print final state |
+| *drop* | Same as `stop()` |
+
+#### `SpinnerLineHandle` methods
+
+Each `SpinnerLineHandle` controls one line in the group. Finalizing consumes the handle, preventing double-finalization. Handles are `Send` so they can be moved to worker threads.
+
+| Method | Effect |
+|---|---|
+| `update(msg)` | Change this line's message |
+| `success()` | Finalize with `✔` and the current message |
+| `success_with(msg)` | Finalize with `✔` and a replacement message |
+| `fail()` | Finalize with `✖` and the current message |
+| `fail_with(msg)` | Finalize with `✖` and a replacement message |
+| `clear()` | Silently dismiss — line disappears, no output |
+
+#### Examples
 
 ```rust
 use nanospinner::MultiSpinner;
 use std::thread;
 use std::time::Duration;
 
+// Basic: add lines, finalize, stop the group
 let handle = MultiSpinner::new().start();
 
 let line1 = handle.add("Downloading...");
@@ -146,62 +139,31 @@ let line2 = handle.add("Compiling...");
 
 thread::sleep(Duration::from_secs(2));
 line1.success();
-line2.success_with("Compiled successfully!");
+line2.fail_with("Compile error");
 
-handle.stop();
+handle.stop(); // shuts down the render thread
 ```
 
-#### Update and finalize individual spinners
-
 ```rust
-let line = handle.add("Processing...");
-line.update("Processing (50%)...");
-
-// Finalize with success or failure
-line.success();              // ✔ Processing (50%)...
-line.success_with("Done!");  // ✔ Done!
-line.fail();                 // ✖ Processing (50%)...
-line.fail_with("Error");     // ✖ Error
-
-// Or silently dismiss the line
-line.clear();                // (line disappears, no output)
-```
-
-#### Dismiss a line with clear
-
-Use `clear()` to silently remove a spinner line without printing any symbol or message. Remaining lines collapse together with no gap.
-
-```rust
-use nanospinner::MultiSpinner;
-use std::thread;
-use std::time::Duration;
-
+// Clear: silently dismiss lines you no longer need
 let handle = MultiSpinner::new().start();
 
-let line1 = handle.add("Checking cache...");
-let line2 = handle.add("Downloading...");
-let line3 = handle.add("Compiling...");
+let check = handle.add("Running checks...");
+let lint  = handle.add("Linting...");
+let build = handle.add("Building...");
 
 thread::sleep(Duration::from_secs(1));
-line1.clear(); // cache check done — dismiss silently
+lint.clear(); // line disappears, remaining lines collapse
 
 thread::sleep(Duration::from_secs(1));
-line2.success_with("Downloaded!");
-line3.success();
+check.success();
+build.success();
 
 handle.stop();
-// Only the downloaded/compiled lines appear in the final output
 ```
 
-#### Thread-based usage
-
-`SpinnerLineHandle` is `Send`, so you can move it to worker threads:
-
 ```rust
-use nanospinner::MultiSpinner;
-use std::thread;
-use std::time::Duration;
-
+// Thread-based: move line handles to worker threads
 let handle = MultiSpinner::new().start();
 
 let workers: Vec<_> = (1..=3)
@@ -221,15 +183,25 @@ for w in workers {
 handle.stop();
 ```
 
-#### Piped / non-TTY output
+### Custom Writers and TTY Detection
 
-When stdout isn't a terminal, `MultiSpinner` skips animation and the render thread entirely. Each spinner prints a single plain-text result line when finalized:
+Both `Spinner` and `MultiSpinner` auto-detect whether stdout is a terminal. When it isn't (piped, redirected), animation and ANSI codes are skipped — only plain text is printed:
 
-```bash
+```text
 $ my_tool | cat
-✔ Task 1 complete
-✔ Task 2 complete
-✖ Task 3 failed
+✔ Done!
+```
+
+For custom output targets, both offer `with_writer` and `with_writer_tty` constructors:
+
+```rust
+// Custom writer (defaults to non-TTY — no ANSI codes)
+let handle = Spinner::with_writer("Processing...", std::io::stderr()).start();
+let handle = MultiSpinner::with_writer(my_writer).start();
+
+// Custom writer with explicit TTY control
+let handle = Spinner::with_writer_tty("Building...", my_writer, true).start();
+let handle = MultiSpinner::with_writer_tty(my_writer, true).start();
 ```
 
 ## Contributing

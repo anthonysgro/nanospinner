@@ -154,15 +154,21 @@ impl SpinnerHandle {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn stop(&self) {
+    pub fn stop(self) {
+        self.shutdown();
+    }
+
+    fn shutdown(&self) {
         self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.lock().unwrap().take() {
+        let thread = self.thread.lock().unwrap().take();
+        if let Some(thread) = thread {
             let _ = thread.join();
-        }
-        if self.is_tty {
-            let mut w = self.writer.lock().unwrap();
-            write!(w, "\r{CLEAR_LINE}").unwrap();
-            w.flush().unwrap();
+            if self.is_tty {
+                if let Ok(mut w) = self.writer.lock() {
+                    let _ = write!(w, "\r{CLEAR_LINE}");
+                    let _ = w.flush();
+                }
+            }
         }
     }
 
@@ -172,7 +178,7 @@ impl SpinnerHandle {
     /// Panics if the internal mutex is poisoned.
     pub fn success(self) {
         let msg = self.message.lock().unwrap().clone();
-        self.stop();
+        self.shutdown();
         let output = if self.is_tty {
             format_finalize("✔", GREEN, &msg)
         } else {
@@ -188,7 +194,7 @@ impl SpinnerHandle {
     /// # Panics
     /// Panics if the internal mutex is poisoned.
     pub fn success_with(self, message: impl Into<String>) {
-        self.stop();
+        self.shutdown();
         let msg = message.into();
         let output = if self.is_tty {
             format_finalize("✔", GREEN, &msg)
@@ -206,7 +212,7 @@ impl SpinnerHandle {
     /// Panics if the internal mutex is poisoned.
     pub fn fail(self) {
         let msg = self.message.lock().unwrap().clone();
-        self.stop();
+        self.shutdown();
         let output = if self.is_tty {
             format_finalize("✖", RED, &msg)
         } else {
@@ -222,7 +228,7 @@ impl SpinnerHandle {
     /// # Panics
     /// Panics if the internal mutex is poisoned.
     pub fn fail_with(self, message: impl Into<String>) {
-        self.stop();
+        self.shutdown();
         let msg = message.into();
         let output = if self.is_tty {
             format_finalize("✖", RED, &msg)
@@ -237,10 +243,7 @@ impl SpinnerHandle {
 
 impl Drop for SpinnerHandle {
     fn drop(&mut self) {
-        self.stop_flag.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.get_mut().unwrap().take() {
-            let _ = thread.join();
-        }
+        self.shutdown();
     }
 }
 
@@ -377,6 +380,35 @@ mod tests {
         let handle = spinner.start();
         thread::sleep(Duration::from_millis(100));
         drop(handle);
+    }
+
+    #[test]
+    fn test_single_spinner_drop_clears_line_like_stop() {
+        // With stop()
+        let buf_stop = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let writer = TestWriter(Arc::clone(&buf_stop));
+        let handle = Spinner::with_writer_tty("Working...", writer, true).start();
+        thread::sleep(Duration::from_millis(100));
+        handle.stop();
+        let out_stop = String::from_utf8(buf_stop.lock().unwrap().clone()).unwrap();
+
+        // With drop (no stop)
+        let buf_drop = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let writer = TestWriter(Arc::clone(&buf_drop));
+        let handle = Spinner::with_writer_tty("Working...", writer, true).start();
+        thread::sleep(Duration::from_millis(100));
+        drop(handle);
+        let out_drop = String::from_utf8(buf_drop.lock().unwrap().clone()).unwrap();
+
+        // Both must contain the clear-line sequence
+        assert!(
+            out_stop.contains(CLEAR_LINE),
+            "stop output must contain CLEAR_LINE"
+        );
+        assert!(
+            out_drop.contains(CLEAR_LINE),
+            "drop output must contain CLEAR_LINE"
+        );
     }
 
     #[test]

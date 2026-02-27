@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5]
+
+### Changed
+
+- `SpinnerHandle::stop()` and `MultiSpinnerHandle::stop()` now consume `self` instead of borrowing `&self`, consistent with `success()` and `fail()` — the compiler now prevents using a handle after stopping it
+- Internal: extracted shared shutdown logic into private `shutdown(&self)` method, used by both `stop()` and `Drop`
+- Restructured README: consolidated API docs, removed duplicated TTY/writer sections
+
 ## [0.2.4]
 
 ### Changed
@@ -80,7 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Drop` implementation for clean shutdown
 - Zero dependencies (only `std`)
 
-[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/anthonysgro/nanospinner/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/anthonysgro/nanospinner/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/anthonysgro/nanospinner/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/anthonysgro/nanospinner/compare/v0.2.1...v0.2.2
