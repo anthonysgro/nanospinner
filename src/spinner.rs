@@ -7,7 +7,8 @@ use std::time::Duration;
 #[cfg(test)]
 use crate::shared::RESET;
 use crate::shared::{
-    format_finalize, format_finalize_plain, format_frame, CLEAR_LINE, FRAMES, GREEN, RED,
+    format_finalize, format_finalize_plain, format_frame, BLUE, CLEAR_LINE, FRAMES, GREEN, RED,
+    YELLOW,
 };
 
 /// A builder for configuring and starting a terminal spinner.
@@ -239,6 +240,74 @@ impl SpinnerHandle {
         write!(w, "{output}").unwrap();
         w.flush().unwrap();
     }
+
+    /// Stop the spinner and print a yellow ⚠ with the current message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn warn(self) {
+        let msg = self.message.lock().unwrap().clone();
+        self.shutdown();
+        let output = if self.is_tty {
+            format_finalize("⚠", YELLOW, &msg)
+        } else {
+            format_finalize_plain("⚠", &msg)
+        };
+        let mut w = self.writer.lock().unwrap();
+        write!(w, "{output}").unwrap();
+        w.flush().unwrap();
+    }
+
+    /// Stop the spinner and print a yellow ⚠ with a replacement message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn warn_with(self, message: impl Into<String>) {
+        self.shutdown();
+        let msg = message.into();
+        let output = if self.is_tty {
+            format_finalize("⚠", YELLOW, &msg)
+        } else {
+            format_finalize_plain("⚠", &msg)
+        };
+        let mut w = self.writer.lock().unwrap();
+        write!(w, "{output}").unwrap();
+        w.flush().unwrap();
+    }
+
+    /// Stop the spinner and print a blue ℹ with the current message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn info(self) {
+        let msg = self.message.lock().unwrap().clone();
+        self.shutdown();
+        let output = if self.is_tty {
+            format_finalize("ℹ", BLUE, &msg)
+        } else {
+            format_finalize_plain("ℹ", &msg)
+        };
+        let mut w = self.writer.lock().unwrap();
+        write!(w, "{output}").unwrap();
+        w.flush().unwrap();
+    }
+
+    /// Stop the spinner and print a blue ℹ with a replacement message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn info_with(self, message: impl Into<String>) {
+        self.shutdown();
+        let msg = message.into();
+        let output = if self.is_tty {
+            format_finalize("ℹ", BLUE, &msg)
+        } else {
+            format_finalize_plain("ℹ", &msg)
+        };
+        let mut w = self.writer.lock().unwrap();
+        write!(w, "{output}").unwrap();
+        w.flush().unwrap();
+    }
 }
 
 impl Drop for SpinnerHandle {
@@ -250,20 +319,8 @@ impl Drop for SpinnerHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shared::tests::TestWriter;
     use proptest::prelude::*;
-
-    /// A simple Write wrapper around a shared buffer for tests.
-    #[derive(Clone)]
-    struct TestWriter(Arc<Mutex<Vec<u8>>>);
-
-    impl io::Write for TestWriter {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.0.lock().unwrap().write(buf)
-        }
-        fn flush(&mut self) -> io::Result<()> {
-            self.0.lock().unwrap().flush()
-        }
-    }
 
     proptest! {
         #[test]
@@ -299,15 +356,15 @@ mod tests {
         fn property_tty_fail_output_contains_ansi_symbol_and_message(
             msg in "[^\x00]{1,50}"
         ) {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let spinner = Spinner::with_writer_tty(msg.clone(), writer, true);
             let handle = spinner.start();
             thread::sleep(Duration::from_millis(100));
             handle.fail();
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             prop_assert!(output.contains(RED), "TTY fail output must contain RED ANSI code");
             prop_assert!(output.contains("✖"), "TTY fail output must contain ✖ symbol");
             prop_assert!(output.contains(&msg), "TTY fail output must contain the message");
@@ -319,37 +376,21 @@ mod tests {
             original in "[^\x00]{1,50}",
             replacement in "[^\x00]{1,50}"
         ) {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let spinner = Spinner::with_writer_tty(original, writer, true);
             let handle = spinner.start();
             thread::sleep(Duration::from_millis(100));
             handle.fail_with(replacement.clone());
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             prop_assert!(output.contains(RED), "TTY fail_with output must contain RED ANSI code");
             prop_assert!(output.contains("✖"), "TTY fail_with output must contain ✖ symbol");
             prop_assert!(output.contains(&replacement), "TTY fail_with output must contain the replacement message");
             prop_assert!(output.contains(RESET), "TTY fail_with output must contain RESET ANSI code");
         }
 
-        #[test]
-        fn property_with_writer_tty_false_produces_plain_output(
-            msg in "[^\x00]{1,50}"
-        ) {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
-
-            let spinner = Spinner::with_writer_tty(msg.clone(), writer, false);
-            let handle = spinner.start();
-            handle.success();
-
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-            prop_assert!(!output.contains("\x1b["), "with_writer_tty(false) output must not contain ANSI codes");
-            let expected = format!("✔ {}\n", msg);
-            prop_assert_eq!(output, expected, "with_writer_tty(false) must produce plain text output");
-        }
     }
 
     #[test]
@@ -366,16 +407,14 @@ mod tests {
     }
 
     #[test]
-    fn test_with_writer_uses_provided_writer() {
-        let buf = Vec::<u8>::new();
-        let spinner = Spinner::with_writer("test", buf);
+    fn test_lifecycle_no_panic() {
+        // start → sleep → stop
+        let spinner = Spinner::with_writer("test", Vec::<u8>::new());
         let handle = spinner.start();
         thread::sleep(Duration::from_millis(100));
         handle.stop();
-    }
 
-    #[test]
-    fn test_drop_without_stop_joins_thread() {
+        // start → sleep → drop
         let spinner = Spinner::with_writer("test", Vec::<u8>::new());
         let handle = spinner.start();
         thread::sleep(Duration::from_millis(100));
@@ -385,20 +424,20 @@ mod tests {
     #[test]
     fn test_single_spinner_drop_clears_line_like_stop() {
         // With stop()
-        let buf_stop = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf_stop));
+        let (writer, _buf_stop) = TestWriter::new();
+        let reader_stop = writer.clone();
         let handle = Spinner::with_writer_tty("Working...", writer, true).start();
         thread::sleep(Duration::from_millis(100));
         handle.stop();
-        let out_stop = String::from_utf8(buf_stop.lock().unwrap().clone()).unwrap();
+        let out_stop = reader_stop.output();
 
         // With drop (no stop)
-        let buf_drop = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf_drop));
+        let (writer, _buf_drop) = TestWriter::new();
+        let reader_drop = writer.clone();
         let handle = Spinner::with_writer_tty("Working...", writer, true).start();
         thread::sleep(Duration::from_millis(100));
         drop(handle);
-        let out_drop = String::from_utf8(buf_drop.lock().unwrap().clone()).unwrap();
+        let out_drop = reader_drop.output();
 
         // Both must contain the clear-line sequence
         assert!(
@@ -412,101 +451,89 @@ mod tests {
     }
 
     #[test]
-    fn test_non_tty_success_has_no_ansi_codes() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+    fn test_non_tty_finalization_all_variants() {
+        // (symbol, original_message, replacement_message, finalize_fn)
+        // Each variant is tested with original message and with a replacement message.
+        let cases: Vec<(&str, &str, &str, Box<dyn Fn(SpinnerHandle)>)> = vec![
+            // success — original message
+            ("✔", "msg1", "msg1", Box::new(|h| h.success())),
+            // success — replacement message
+            (
+                "✔",
+                "ignored",
+                "replacement1",
+                Box::new(|h| h.success_with("replacement1".to_string())),
+            ),
+            // fail — original message
+            ("✖", "msg2", "msg2", Box::new(|h| h.fail())),
+            // fail — replacement message
+            (
+                "✖",
+                "ignored",
+                "replacement2",
+                Box::new(|h| h.fail_with("replacement2".to_string())),
+            ),
+            // warn — original message
+            ("⚠", "msg3", "msg3", Box::new(|h| h.warn())),
+            // warn — replacement message
+            (
+                "⚠",
+                "ignored",
+                "replacement3",
+                Box::new(|h| h.warn_with("replacement3".to_string())),
+            ),
+            // info — original message
+            ("ℹ", "msg4", "msg4", Box::new(|h| h.info())),
+            // info — replacement message
+            (
+                "ℹ",
+                "ignored",
+                "replacement4",
+                Box::new(|h| h.info_with("replacement4".to_string())),
+            ),
+        ];
 
-        let spinner = Spinner::with_writer("Compiling...", writer);
-        let handle = spinner.start();
-        handle.success();
+        for (symbol, initial_msg, expected_msg, finalize) in cases {
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        assert!(
-            !output.contains("\x1b["),
-            "non-TTY output must not contain ANSI escape codes"
-        );
-        assert!(
-            !output.contains(CLEAR_LINE),
-            "non-TTY output must not contain CLEAR_LINE"
-        );
-        assert!(output.contains("✔"), "non-TTY output should contain ✔");
-        assert!(
-            output.contains("Compiling..."),
-            "non-TTY output should contain the message"
-        );
-        assert_eq!(output, "✔ Compiling...\n");
-    }
+            let spinner = Spinner::with_writer(initial_msg, writer);
+            let handle = spinner.start();
+            thread::sleep(Duration::from_millis(50));
+            finalize(handle);
 
-    #[test]
-    fn test_non_tty_fail_has_no_ansi_codes() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
-
-        let spinner = Spinner::with_writer("Deploying...", writer);
-        let handle = spinner.start();
-        handle.fail();
-
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        assert!(
-            !output.contains("\x1b["),
-            "non-TTY output must not contain ANSI escape codes"
-        );
-        assert!(output.contains("✖"), "non-TTY output should contain ✖");
-        assert_eq!(output, "✖ Deploying...\n");
-    }
-
-    #[test]
-    fn test_non_tty_success_with_has_no_ansi_codes() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
-
-        let spinner = Spinner::with_writer("Working...", writer);
-        let handle = spinner.start();
-        handle.success_with("Done!");
-
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        assert!(
-            !output.contains("\x1b["),
-            "non-TTY output must not contain ANSI escape codes"
-        );
-        assert_eq!(output, "✔ Done!\n");
-    }
-
-    #[test]
-    fn test_non_tty_skips_animation() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
-
-        let spinner = Spinner::with_writer("Loading...", writer);
-        let handle = spinner.start();
-        // Sleep long enough that a TTY spinner would have written frames
-        thread::sleep(Duration::from_millis(200));
-        handle.success();
-
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
-        // Should only contain the final line, no spinner frames
-        assert!(
-            !output.contains('⠋'),
-            "non-TTY output must not contain spinner frames"
-        );
-        assert!(
-            !output.contains('\r'),
-            "non-TTY output must not contain carriage returns"
-        );
-        assert_eq!(output, "✔ Loading...\n");
+            let output = reader.output();
+            let expected = format!("{symbol} {expected_msg}\n");
+            assert_eq!(
+                output, expected,
+                "non-TTY {symbol} output must be \"{symbol} {expected_msg}\\n\", got: {output:?}"
+            );
+            assert!(
+                !output.contains("\x1b["),
+                "non-TTY {symbol} output must not contain ANSI escape codes"
+            );
+            assert!(
+                !output.contains('\r'),
+                "non-TTY {symbol} output must not contain carriage returns"
+            );
+            assert!(
+                !output.contains('⠋'),
+                "non-TTY {symbol} output must not contain spinner frames"
+            );
+        }
     }
 
     #[test]
     fn test_tty_mode_emits_ansi_codes() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+        let (writer, _buf) = TestWriter::new();
+        let reader = writer.clone();
 
         let spinner = Spinner::with_writer_tty("Building...", writer, true);
         let handle = spinner.start();
         thread::sleep(Duration::from_millis(200));
         handle.success();
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        let output = reader.output();
         assert!(
             output.contains("\x1b["),
             "TTY output should contain ANSI escape codes"

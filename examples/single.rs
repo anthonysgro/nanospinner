@@ -35,6 +35,20 @@ fn main() {
 
     thread::sleep(Duration::from_millis(500));
 
+    // Warn
+    let handle = Spinner::new("Checking disk space...").start();
+    thread::sleep(Duration::from_secs(2));
+    handle.warn_with("Disk usage above 80%.");
+
+    thread::sleep(Duration::from_millis(500));
+
+    // Info
+    let handle = Spinner::new("Scanning environment...").start();
+    thread::sleep(Duration::from_secs(2));
+    handle.info_with("Using cached config.");
+
+    thread::sleep(Duration::from_millis(500));
+
     // Update mid-spin
     let handle = Spinner::new("Step 1 of 3...").start();
     thread::sleep(Duration::from_secs(1));

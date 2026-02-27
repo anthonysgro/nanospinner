@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 08037db2ae3271fa0ecfae5b8b87b42443d20729404be06fa0cafefe260eae24 # shrinks to idx = 0, msg = ""
+cc 07e3a8f0b92b729ef7352b0abafb08d919fa9fa59f711e640274a70686f87ac9 # shrinks to msg = "\u{1b}"

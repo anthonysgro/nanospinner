@@ -21,7 +21,7 @@ fn main() {
 
         thread::sleep(Duration::from_secs(2));
         a.success();
-        b.success_with("Crate B compiled!");
+        b.warn_with("Crate B compiled with warnings.");
         c.fail_with("Crate C had errors.");
 
         handle.stop();

@@ -1,6 +1,6 @@
 [package]
 name = "nanospinner"
-version = "0.2.5"
+version = "0.3.0"
 edition = "2021"
 description = "A minimal, zero-dependency terminal spinner for Rust CLI applications"
 license = "MIT"

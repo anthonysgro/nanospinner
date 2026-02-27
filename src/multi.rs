@@ -1,4 +1,4 @@
-use crate::shared::{format_finalize_plain, CLEAR_LINE, FRAMES, GREEN, RED, RESET};
+use crate::shared::{format_finalize_plain, BLUE, CLEAR_LINE, FRAMES, GREEN, RED, RESET, YELLOW};
 
 use std::io::{self, IsTerminal};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -55,6 +55,23 @@ fn multi_spin_loop(
                         write!(w, "\r{CLEAR_LINE}{RED}✖{RESET} {msg}\n").unwrap();
                         visible_count += 1;
                     }
+                    LineStatus::Warned => {
+                        write!(w, "\r{}{}⚠{} {}\n", CLEAR_LINE, YELLOW, RESET, line.message)
+                            .unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::WarnedWith(msg) => {
+                        write!(w, "\r{CLEAR_LINE}{YELLOW}⚠{RESET} {msg}\n").unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::Informed => {
+                        write!(w, "\r{}{}ℹ{} {}\n", CLEAR_LINE, BLUE, RESET, line.message).unwrap();
+                        visible_count += 1;
+                    }
+                    LineStatus::InformedWith(msg) => {
+                        write!(w, "\r{CLEAR_LINE}{BLUE}ℹ{RESET} {msg}\n").unwrap();
+                        visible_count += 1;
+                    }
                     LineStatus::Cleared => { /* skip — no output */ }
                 }
             }
@@ -98,6 +115,14 @@ pub(crate) enum LineStatus {
     Failed,
     /// Finalized with a replacement failure message.
     FailedWith(String),
+    /// Finalized with warning (yellow ⚠).
+    Warned,
+    /// Finalized with a replacement warning message.
+    WarnedWith(String),
+    /// Finalized with info (blue ℹ).
+    Informed,
+    /// Finalized with a replacement info message.
+    InformedWith(String),
     /// Silently dismissed — produces no output.
     Cleared,
 }
@@ -297,6 +322,22 @@ impl MultiSpinnerHandle {
                     let _ = write!(w, "\r{CLEAR_LINE}{RED}✖{RESET} {msg}\n");
                     final_visible += 1;
                 }
+                LineStatus::Warned => {
+                    let _ = write!(w, "\r{}{}⚠{} {}\n", CLEAR_LINE, YELLOW, RESET, line.message);
+                    final_visible += 1;
+                }
+                LineStatus::WarnedWith(msg) => {
+                    let _ = write!(w, "\r{CLEAR_LINE}{YELLOW}⚠{RESET} {msg}\n");
+                    final_visible += 1;
+                }
+                LineStatus::Informed => {
+                    let _ = write!(w, "\r{}{}ℹ{} {}\n", CLEAR_LINE, BLUE, RESET, line.message);
+                    final_visible += 1;
+                }
+                LineStatus::InformedWith(msg) => {
+                    let _ = write!(w, "\r{CLEAR_LINE}{BLUE}ℹ{RESET} {msg}\n");
+                    final_visible += 1;
+                }
                 LineStatus::Cleared => { /* skip — no output */ }
             }
         }
@@ -387,6 +428,70 @@ impl SpinnerLineHandle {
         }
     }
 
+    /// Finalize this spinner line with a yellow ⚠ and the current message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn warn(self) {
+        let mut lines = self.lines.lock().unwrap();
+        let message = lines[self.index].message.clone();
+        lines[self.index].status = LineStatus::Warned;
+        drop(lines);
+        if !self.is_tty {
+            let mut w = self.writer.lock().unwrap();
+            write!(w, "{}", format_finalize_plain("⚠", &message)).unwrap();
+            w.flush().unwrap();
+        }
+    }
+
+    /// Finalize this spinner line with a yellow ⚠ and a replacement message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn warn_with(self, message: impl Into<String>) {
+        let msg = message.into();
+        let mut lines = self.lines.lock().unwrap();
+        lines[self.index].status = LineStatus::WarnedWith(msg.clone());
+        drop(lines);
+        if !self.is_tty {
+            let mut w = self.writer.lock().unwrap();
+            write!(w, "{}", format_finalize_plain("⚠", &msg)).unwrap();
+            w.flush().unwrap();
+        }
+    }
+
+    /// Finalize this spinner line with a blue ℹ and the current message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn info(self) {
+        let mut lines = self.lines.lock().unwrap();
+        let message = lines[self.index].message.clone();
+        lines[self.index].status = LineStatus::Informed;
+        drop(lines);
+        if !self.is_tty {
+            let mut w = self.writer.lock().unwrap();
+            write!(w, "{}", format_finalize_plain("ℹ", &message)).unwrap();
+            w.flush().unwrap();
+        }
+    }
+
+    /// Finalize this spinner line with a blue ℹ and a replacement message.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn info_with(self, message: impl Into<String>) {
+        let msg = message.into();
+        let mut lines = self.lines.lock().unwrap();
+        lines[self.index].status = LineStatus::InformedWith(msg.clone());
+        drop(lines);
+        if !self.is_tty {
+            let mut w = self.writer.lock().unwrap();
+            write!(w, "{}", format_finalize_plain("ℹ", &msg)).unwrap();
+            w.flush().unwrap();
+        }
+    }
+
     /// Silently dismiss this spinner line.
     ///
     /// The line disappears from the terminal on the next render frame
@@ -407,6 +512,7 @@ impl SpinnerLineHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shared::tests::TestWriter;
     use proptest::prelude::*;
 
     fn _assert_send() {
@@ -414,23 +520,10 @@ mod tests {
         assert_send::<SpinnerLineHandle>();
     }
 
-    /// A simple Write wrapper around a shared buffer for tests.
-    #[derive(Clone)]
-    struct TestWriter(Arc<Mutex<Vec<u8>>>);
-
-    impl io::Write for TestWriter {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.0.lock().unwrap().write(buf)
-        }
-        fn flush(&mut self) -> io::Result<()> {
-            self.0.lock().unwrap().flush()
-        }
-    }
-
     #[test]
     fn test_multi_spinner_tty_single_spinner_renders() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+        let (writer, _buf) = TestWriter::new();
+        let reader = writer.clone();
 
         let handle = MultiSpinner::with_writer_tty(writer, true).start();
         let line = handle.add("Compiling crate");
@@ -439,7 +532,7 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         handle.stop();
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        let output = reader.output();
 
         // Verify braille animation frames were rendered
         let braille_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -467,8 +560,8 @@ mod tests {
 
     #[test]
     fn test_multi_spinner_tty_add_after_finalize() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+        let (writer, _buf) = TestWriter::new();
+        let reader = writer.clone();
 
         let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -485,7 +578,7 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         handle.stop();
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        let output = reader.output();
 
         // Both messages should appear in the output
         assert!(
@@ -502,34 +595,10 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_spinner_tty_stop_joins_thread() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
-
-        let handle = MultiSpinner::with_writer_tty(writer, true).start();
-        let _line = handle.add("Working");
-        thread::sleep(Duration::from_millis(100));
-        handle.stop();
-        // The fact that we reach this point means stop() joined the thread without hanging.
-    }
-
-    #[test]
-    fn test_multi_spinner_tty_drop_without_stop() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
-
-        let handle = MultiSpinner::with_writer_tty(writer, true).start();
-        let _line = handle.add("Working");
-        thread::sleep(Duration::from_millis(100));
-        drop(handle);
-        // The fact that we reach this point means drop() joined the thread without hanging.
-    }
-
-    #[test]
     fn test_multi_spinner_drop_renders_same_as_stop() {
         // Run with stop()
-        let buf_stop = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf_stop));
+        let (writer, buf_stop) = TestWriter::new();
+        let reader_stop = writer.clone();
         let handle = MultiSpinner::with_writer_tty(writer, true).start();
         let a = handle.add("Alpha");
         let b = handle.add("Beta");
@@ -541,8 +610,8 @@ mod tests {
         let len_stop = buf_stop.lock().unwrap().len();
 
         // Run with drop (no stop)
-        let buf_drop = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf_drop));
+        let (writer, buf_drop) = TestWriter::new();
+        let reader_drop = writer.clone();
         let handle = MultiSpinner::with_writer_tty(writer, true).start();
         let a = handle.add("Alpha");
         let b = handle.add("Beta");
@@ -556,8 +625,8 @@ mod tests {
         // Both should have produced final render output (not just animation).
         // Exact byte equality is fragile due to timing, but both should contain
         // the final status symbols.
-        let out_stop = String::from_utf8(buf_stop.lock().unwrap().clone()).unwrap();
-        let out_drop = String::from_utf8(buf_drop.lock().unwrap().clone()).unwrap();
+        let out_stop = reader_stop.output();
+        let out_drop = reader_drop.output();
         assert!(out_stop.contains("✔"), "stop output must contain ✔");
         assert!(out_stop.contains("✖"), "stop output must contain ✖");
         assert!(out_drop.contains("✔"), "drop output must contain ✔");
@@ -569,8 +638,8 @@ mod tests {
 
     #[test]
     fn test_spinner_line_handle_send_to_thread() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+        let (writer, _buf) = TestWriter::new();
+        let reader = writer.clone();
 
         let handle = MultiSpinner::with_writer(writer).start();
         let line_handle = handle.add("Task from another thread");
@@ -581,14 +650,14 @@ mod tests {
         });
         t.join().expect("thread must not panic");
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        let output = reader.output();
         assert_eq!(output, "✔ Task from another thread\n");
     }
 
     #[test]
     fn test_multiple_handles_finalized_from_different_threads() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+        let (writer, _buf) = TestWriter::new();
+        let reader = writer.clone();
 
         let handle = MultiSpinner::with_writer(writer).start();
         let h1 = handle.add("alpha");
@@ -613,7 +682,7 @@ mod tests {
                 .expect("thread must not panic during concurrent finalization");
         }
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        let output = reader.output();
         let output_lines: Vec<&str> = output.split('\n').filter(|l| !l.is_empty()).collect();
 
         // All three lines must appear exactly once
@@ -634,8 +703,8 @@ mod tests {
 
     #[test]
     fn test_stop_finalization_clear_one_among_others() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+        let (writer, _buf) = TestWriter::new();
+        let reader = writer.clone();
 
         let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -655,7 +724,7 @@ mod tests {
 
         handle.stop();
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        let output = reader.output();
 
         // Extract the final frame: everything from the last cursor-up sequence onward
         let last_cursor_up_pos = {
@@ -701,8 +770,8 @@ mod tests {
 
     #[test]
     fn test_stop_finalization_all_cleared() {
-        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = TestWriter(Arc::clone(&buf));
+        let (writer, buf) = TestWriter::new();
+        let reader = writer.clone();
 
         let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -725,7 +794,7 @@ mod tests {
 
         handle.stop();
 
-        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        let output = reader.output();
         let output_after_stop = &output[len_before_stop..];
 
         // When all lines are cleared, last_visible_count is 0, so stop()
@@ -771,8 +840,7 @@ mod tests {
     proptest! {
         #[test]
         fn property_add_grows_line_list(msg in ".*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
 
             let handle = MultiSpinner::with_writer(writer).start();
             let line_handle = handle.add(msg.clone());
@@ -787,8 +855,7 @@ mod tests {
 
         #[test]
         fn property_plain_mode_defers_output(msg in ".*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, buf) = TestWriter::new();
 
             // with_writer defaults is_tty to false, so this is plain mode
             let handle = MultiSpinner::with_writer(writer).start();
@@ -800,8 +867,7 @@ mod tests {
 
         #[test]
         fn property_update_changes_message(initial in ".*", updated in ".*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
 
             let handle = MultiSpinner::with_writer(writer).start();
             let line_handle = handle.add(initial);
@@ -813,14 +879,14 @@ mod tests {
 
         #[test]
         fn property_plain_mode_success_output(msg in "\\PC*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer(writer).start();
             let line_handle = handle.add(msg.clone());
             line_handle.success();
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             let expected = format!("✔ {}\n", msg);
             prop_assert_eq!(output.clone(), expected, "success() output must be '✔ {{message}}\\n'");
             prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
@@ -829,14 +895,14 @@ mod tests {
 
         #[test]
         fn property_plain_mode_success_with_output(original in "\\PC*", replacement in "\\PC*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer(writer).start();
             let line_handle = handle.add(original);
             line_handle.success_with(replacement.clone());
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             let expected = format!("✔ {}\n", replacement);
             prop_assert_eq!(output.clone(), expected, "success_with() output must be '✔ {{replacement}}\\n'");
             prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
@@ -845,14 +911,14 @@ mod tests {
 
         #[test]
         fn property_plain_mode_fail_output(msg in "\\PC*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer(writer).start();
             let line_handle = handle.add(msg.clone());
             line_handle.fail();
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             let expected = format!("✖ {}\n", msg);
             prop_assert_eq!(output.clone(), expected, "fail() output must be '✖ {{message}}\\n'");
             prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
@@ -861,14 +927,14 @@ mod tests {
 
         #[test]
         fn property_plain_mode_fail_with_output(original in "\\PC*", replacement in "\\PC*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer(writer).start();
             let line_handle = handle.add(original);
             line_handle.fail_with(replacement.clone());
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             let expected = format!("✖ {}\n", replacement);
             prop_assert_eq!(output.clone(), expected, "fail_with() output must be '✖ {{replacement}}\\n'");
             prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
@@ -877,8 +943,8 @@ mod tests {
 
         #[test]
         fn property_plain_mode_finalization_order(messages in prop::collection::vec("\\PC+", 2..8)) {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer(writer).start();
 
@@ -894,7 +960,7 @@ mod tests {
                 line_handle.success();
             }
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             let output_lines: Vec<&str> = output.split('\n').filter(|l| !l.is_empty()).collect();
 
             // Build expected lines in finalization (reverse) order
@@ -921,8 +987,8 @@ mod tests {
 
         #[test]
         fn property_concurrent_finalization_safety(messages in prop::collection::vec("\\PC+", 2..8)) {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer(writer).start();
 
@@ -947,7 +1013,7 @@ mod tests {
                 t.join().expect("thread must not panic during concurrent finalization");
             }
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             let output_lines: Vec<&str> = output.split('\n').filter(|l| !l.is_empty()).collect();
 
             // Every finalized line must appear in output exactly once
@@ -959,21 +1025,22 @@ mod tests {
 
             for msg in &messages {
                 let expected = format!("✔ {}", msg);
-                let count = output_lines.iter().filter(|&&l| l == expected.as_str()).count();
+                let output_count = output_lines.iter().filter(|&&l| l == expected.as_str()).count();
+                let input_count = messages.iter().filter(|m| *m == msg).count();
                 prop_assert_eq!(
-                    count,
-                    1,
-                    "message '{}' must appear exactly once in output, found {}",
+                    output_count,
+                    input_count,
+                    "message '{}' appears {} times in input but {} times in output",
                     msg,
-                    count
+                    input_count,
+                    output_count
                 );
             }
         }
 
         #[test]
         fn property_clear_transitions_status_to_cleared(msg in ".*") {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
 
             let handle = MultiSpinner::with_writer(writer).start();
             let line_handle = handle.add(msg);
@@ -997,8 +1064,8 @@ mod tests {
             let messages = &messages[..count];
             let clear_flags = &clear_flags[..count];
 
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer(writer).start();
 
@@ -1016,7 +1083,7 @@ mod tests {
                 }
             }
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
             let output_lines: Vec<&str> = output.split('\n').filter(|l| !l.is_empty()).collect();
 
             // Count expected success lines (non-cleared)
@@ -1036,6 +1103,71 @@ mod tests {
                 );
             }
         }
+
+        // Feature: warn-info-finalization, Property 3: Multi-spinner LineStatus transition correctness
+        #[test]
+        fn property_plain_mode_warn_output(msg in "\\PC*") {
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
+
+            let handle = MultiSpinner::with_writer(writer).start();
+            let line_handle = handle.add(msg.clone());
+            line_handle.warn();
+
+            let output = reader.output();
+            let expected = format!("⚠ {}\n", msg);
+            prop_assert_eq!(output.clone(), expected, "warn() output must be '⚠ {{message}}\\n'");
+            prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
+            prop_assert!(!output.contains('\r'), "output must contain no carriage returns");
+        }
+
+        #[test]
+        fn property_plain_mode_warn_with_output(original in "\\PC*", replacement in "\\PC*") {
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
+
+            let handle = MultiSpinner::with_writer(writer).start();
+            let line_handle = handle.add(original);
+            line_handle.warn_with(replacement.clone());
+
+            let output = reader.output();
+            let expected = format!("⚠ {}\n", replacement);
+            prop_assert_eq!(output.clone(), expected, "warn_with() output must be '⚠ {{replacement}}\\n'");
+            prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
+            prop_assert!(!output.contains('\r'), "output must contain no carriage returns");
+        }
+
+        #[test]
+        fn property_plain_mode_info_output(msg in "\\PC*") {
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
+
+            let handle = MultiSpinner::with_writer(writer).start();
+            let line_handle = handle.add(msg.clone());
+            line_handle.info();
+
+            let output = reader.output();
+            let expected = format!("ℹ {}\n", msg);
+            prop_assert_eq!(output.clone(), expected, "info() output must be 'ℹ {{message}}\\n'");
+            prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
+            prop_assert!(!output.contains('\r'), "output must contain no carriage returns");
+        }
+
+        #[test]
+        fn property_plain_mode_info_with_output(original in "\\PC*", replacement in "\\PC*") {
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
+
+            let handle = MultiSpinner::with_writer(writer).start();
+            let line_handle = handle.add(original);
+            line_handle.info_with(replacement.clone());
+
+            let output = reader.output();
+            let expected = format!("ℹ {}\n", replacement);
+            prop_assert_eq!(output.clone(), expected, "info_with() output must be 'ℹ {{replacement}}\\n'");
+            prop_assert!(!output.contains("\x1b["), "output must contain no ANSI escape codes");
+            prop_assert!(!output.contains('\r'), "output must contain no carriage returns");
+        }
     }
 
     proptest! {
@@ -1046,8 +1178,8 @@ mod tests {
             success_msg in "[a-zA-Z0-9 ]{1,30}",
             fail_msg in "[a-zA-Z0-9 ]{1,30}"
         ) {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1067,7 +1199,7 @@ mod tests {
 
             handle.stop();
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
 
             // Verify ANSI cursor-up sequences for repositioning
             let has_cursor_up = output.contains("\x1b[") && {
@@ -1119,8 +1251,8 @@ mod tests {
             let messages = &messages[..count];
             let clear_flags = &clear_flags[..count];
 
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1147,7 +1279,7 @@ mod tests {
 
             handle.stop();
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
 
             // Cleared messages must NOT appear in the final stop output.
             // The stop finalization is the last redraw — we check the output
@@ -1207,8 +1339,7 @@ mod tests {
             let messages = &messages[..count];
             let clear_flags = &clear_flags[..count];
 
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1327,8 +1458,8 @@ mod tests {
             // (visible_count == 0, render loop won't produce a frame to check)
             prop_assume!(cleared_count > 0 && visible_count > 0);
 
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1357,7 +1488,7 @@ mod tests {
 
             handle.stop();
 
-            let full_output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let full_output = reader.output();
             let post_clear_output = &full_output[pos_before_clear..];
 
             // Find ALL frames in post-clear output and check if any has enough CLEAR_LINE.
@@ -1402,8 +1533,8 @@ mod tests {
             // Need at least one cleared and at least one visible for the stop() path test
             prop_assume!(cleared_count > 0 && visible_count > 0);
 
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1431,7 +1562,7 @@ mod tests {
             // Stop immediately — the render loop may or may not have processed the clear
             handle.stop();
 
-            let full_output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let full_output = reader.output();
             let stop_output = &full_output[pos_before_stop..];
 
             // The stop() output should contain a cursor-up and then render visible lines
@@ -1487,8 +1618,8 @@ mod tests {
         fn property_preservation_render_no_clears(
             num_spinners in 1usize..=8,
         ) {
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1508,7 +1639,7 @@ mod tests {
 
             handle.stop();
 
-            let full_output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let full_output = reader.output();
             // Only analyze render loop output (before stop), since stop() clears
             // Active lines with just CLEAR_LINE (no message content).
             let render_output = &full_output[..render_output_len];
@@ -1560,8 +1691,8 @@ mod tests {
         ) {
             let count = num_spinners.min(finalize_pattern.len());
 
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1593,7 +1724,7 @@ mod tests {
 
             handle.stop();
 
-            let full_output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let full_output = reader.output();
             let stop_output = &full_output[pos_before_stop..];
 
             // stop() should move cursor up by count (all lines visible, none cleared)
@@ -1625,8 +1756,8 @@ mod tests {
         ) {
             let count = num_spinners.min(finalize_pattern.len());
 
-            let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
-            let writer = TestWriter(Arc::clone(&buf));
+            let (writer, _buf) = TestWriter::new();
+            let reader = writer.clone();
 
             let handle = MultiSpinner::with_writer_tty(writer, true).start();
 
@@ -1660,7 +1791,7 @@ mod tests {
 
             handle.stop();
 
-            let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+            let output = reader.output();
 
             // Find the final frame (stop() output)
             if let Some((last_up_pos, _)) = find_last_cursor_up(&output) {
@@ -1731,5 +1862,65 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_multi_spinner_tty_warn_info_all() {
+        let (writer, _buf) = TestWriter::new();
+        let reader = writer.clone();
+
+        let handle = MultiSpinner::with_writer_tty(writer, true).start();
+
+        let warn_line = handle.add("Task W");
+        let warn_with_line = handle.add("checking W");
+        let info_line = handle.add("Task I");
+        let info_with_line = handle.add("checking I");
+
+        thread::sleep(Duration::from_millis(200));
+
+        warn_line.warn();
+        warn_with_line.warn_with("warned result");
+        info_line.info();
+        info_with_line.info_with("informed result");
+
+        thread::sleep(Duration::from_millis(100));
+        handle.stop();
+
+        let output = reader.output();
+
+        // Warn color and symbol
+        assert!(
+            output.contains(YELLOW),
+            "TTY output must contain YELLOW ANSI code"
+        );
+        assert!(output.contains("⚠"), "TTY output must contain ⚠");
+
+        // Info color and symbol
+        assert!(
+            output.contains(BLUE),
+            "TTY output must contain BLUE ANSI code"
+        );
+        assert!(output.contains("ℹ"), "TTY output must contain ℹ");
+
+        // warn() keeps original message
+        assert!(
+            output.contains("Task W"),
+            "TTY output must contain warn original message"
+        );
+        // warn_with() uses replacement message
+        assert!(
+            output.contains("warned result"),
+            "TTY output must contain warn_with replacement message"
+        );
+        // info() keeps original message
+        assert!(
+            output.contains("Task I"),
+            "TTY output must contain info original message"
+        );
+        // info_with() uses replacement message
+        assert!(
+            output.contains("informed result"),
+            "TTY output must contain info_with replacement message"
+        );
     }
 }

@@ -33,7 +33,7 @@ Build times measured from a clean `cargo build --release` on macOS aarch64 (Appl
 ## Features
 
 - Animated Braille dot spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`)
-- Colored finalization: green `✔` for success, red `✖` for failure
+- Colored finalization: green `✔` success, red `✖` failure, yellow `⚠` warning, blue `ℹ` info
 - Update the message while the spinner is running
 - Custom writer support (stdout, stderr, or any `io::Write + Send`)
 - Automatic cleanup via `Drop` — renders final state and joins the background thread, even if you never call `stop()`
@@ -65,7 +65,7 @@ fn main() {
 
 ### Single Spinner
 
-`Spinner::new(msg).start()` spawns a background thread that animates the spinner. It returns a `SpinnerHandle` you use to update or finalize the spinner. Calling `success()` or `fail()` stops the thread and prints the final line — no separate `stop()` needed. If you drop the handle without finalizing, the thread is joined and the line is cleared automatically.
+`Spinner::new(msg).start()` spawns a background thread that animates the spinner. It returns a `SpinnerHandle` you use to update or finalize the spinner. Calling `success()`, `fail()`, `warn()`, or `info()` stops the thread and prints the final line — no separate `stop()` needed. If you drop the handle without finalizing, the thread is joined and the line is cleared automatically.
 
 #### `SpinnerHandle` methods
 
@@ -76,6 +76,10 @@ fn main() {
 | `success_with(msg)` | Stop and print `✔` with a replacement message |
 | `fail()` | Stop and print `✖` with the current message |
 | `fail_with(msg)` | Stop and print `✖` with a replacement message |
+| `warn()` | Stop and print `⚠` with the current message |
+| `warn_with(msg)` | Stop and print `⚠` with a replacement message |
+| `info()` | Stop and print `ℹ` with the current message |
+| `info_with(msg)` | Stop and print `ℹ` with a replacement message |
 | `stop()` | Stop and clear the line (no symbol) |
 | *drop* | Same as `stop()` — joins the thread, clears the line |
 
@@ -122,6 +126,10 @@ Each `SpinnerLineHandle` controls one line in the group. Finalizing consumes the
 | `success_with(msg)` | Finalize with `✔` and a replacement message |
 | `fail()` | Finalize with `✖` and the current message |
 | `fail_with(msg)` | Finalize with `✖` and a replacement message |
+| `warn()` | Finalize with `⚠` and the current message |
+| `warn_with(msg)` | Finalize with `⚠` and a replacement message |
+| `info()` | Finalize with `ℹ` and the current message |
+| `info_with(msg)` | Finalize with `ℹ` and a replacement message |
 | `clear()` | Silently dismiss — line disappears, no output |
 
 #### Examples

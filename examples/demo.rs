@@ -23,14 +23,16 @@ fn main() {
     let lint = handle.add("Running linter...");
     let test = handle.add("Running tests...");
     let docs = handle.add("Generating docs...");
+    let deps = handle.add("Checking dependencies...");
 
     thread::sleep(Duration::from_secs(2));
     lint.clear(); // silently dismiss — no issues found
     thread::sleep(Duration::from_secs(1));
     build.success();
     docs.fail_with("Missing doc comments.");
+    deps.warn_with("2 outdated packages.");
     thread::sleep(Duration::from_secs(2));
-    test.success_with("42 tests passed.");
+    test.info_with("42 tests passed (cached).");
 
     handle.stop();
 }

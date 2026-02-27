@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0]
+
+### Added
+
+- `warn()` and `warn_with()` finalization methods on `SpinnerHandle` and `SpinnerLineHandle` — yellow ⚠ symbol
+- `info()` and `info_with()` finalization methods on `SpinnerHandle` and `SpinnerLineHandle` — blue ℹ symbol
+- `LineStatus::Warned`, `WarnedWith`, `Informed`, `InformedWith` variants for multi-spinner state tracking
+- Updated examples (`single.rs`, `multi.rs`, `demo.rs`) to showcase warn/info finalization
+
+### Changed
+
+- Internal: consolidated test suite — unified `TestWriter` helper, merged overlapping property/unit tests, removed duplicate integration tests (`tests/integration.rs` deleted)
+
 ## [0.2.5]
 
 ### Changed
@@ -88,7 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Drop` implementation for clean shutdown
 - Zero dependencies (only `std`)
 
-[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/anthonysgro/nanospinner/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/anthonysgro/nanospinner/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/anthonysgro/nanospinner/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/anthonysgro/nanospinner/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/anthonysgro/nanospinner/compare/v0.2.2...v0.2.3
