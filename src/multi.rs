@@ -1861,6 +1861,21 @@ mod tests {
     }
 
     #[test]
+    fn test_instant_finish() {
+        let (writer, _buf_stop) = TestWriter::new();
+        let reader = writer.clone();
+        {
+            let multi = MultiSpinner::with_writer_tty(writer, true).start();
+            let spinner = multi.add("start");
+            spinner.success_with("end");
+        }
+        let end_line = format!("\r{CLEAR_LINE}{GREEN}✔{RESET} end\n");
+        let out = reader.output();
+        assert!(out.ends_with(&end_line));
+    }
+
+
+    #[test]
     fn test_multi_spinner_tty_warn_info_all() {
         let (writer, _buf) = TestWriter::new();
         let reader = writer.clone();
