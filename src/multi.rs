@@ -185,13 +185,12 @@ impl MultiSpinnerHandle {
             return;
         };
         let visible = self.last_visible_count.load(Ordering::Relaxed);
-        if visible == 0 {
-            return;
-        }
         let Ok(mut w) = self.writer.lock() else {
             return;
         };
-        let _ = write!(w, "\x1b[{visible}A");
+        if visible != 0 {
+            let _ = write!(w, "\x1b[{visible}A");
+        }
         let mut final_visible: usize = 0;
         for line in &snapshot {
             match &line.status {
