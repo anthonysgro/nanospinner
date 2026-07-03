@@ -524,6 +524,17 @@ mod tests {
     }
 
     #[test]
+    fn test_instant_finish() {
+        let (writer, _buf_stop) = TestWriter::new();
+        let reader = writer.clone();
+        let spinner = Spinner::with_writer_tty("started", writer, true).start();
+        spinner.success_with("end");
+        let end_line = format_finalize("✔", GREEN, "end");
+        let out = reader.output();
+        assert!(out.ends_with(&end_line));
+    }
+
+    #[test]
     fn test_tty_mode_emits_ansi_codes() {
         let (writer, _buf) = TestWriter::new();
         let reader = writer.clone();
